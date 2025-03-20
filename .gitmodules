@@ -1,0 +1,3 @@
+[submodule "src/rotorpy"]
+	path = src/rotorpy
+	url = git@github.com:Jirl-upenn/rotorpy.git

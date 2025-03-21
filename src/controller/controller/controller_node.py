@@ -12,7 +12,7 @@ from std_srvs.srv import Trigger
 from visualization_msgs.msg import MarkerArray
 from jirl_interfaces.srv import UpdateSetpoint
 
-from rotorpy.controllers.quadrotor_control import SE3Control
+from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
 from rotorpy.trajectories.hover_traj import HoverTraj
 from rotorpy.vehicles.crazyflie_params import quad_params as crazyflie_params
 
@@ -24,21 +24,25 @@ from cflib.utils import uri_helper
 import torch
 
 from .controller_qos import qos_best_effort, qos_reliable
+from .controller_fsm import ControllerFSM
 
 device = torch.device('cpu')
-pos_des = [1.0, 3.0, 0.5]
 
 class ControllerNode(Node):
 
     # Import methods
     from .controller_params import init_parameters
-    from .controller_callbacks import mocap_clbk, cmd_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk
+    from .controller_callbacks import mocap_clbk, cmd_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk
     # from .controller_utils import
+
+    mocap_lock = Lock()
+    traj_lock = Lock()
 
     def __init__(self):
         super().__init__('controller')
 
         self.init_parameters()
+        self.init_fsm()
         self.init_publishers()
         self.init_crazyflie()
         self.init_callback_groups()
@@ -51,15 +55,22 @@ class ControllerNode(Node):
     def cleanup(self):
         self.scf.close_link()
 
+    def init_fsm(self):
+        """
+        Init FSM
+        """
+        self.fsm = ControllerFSM()
+
+    def print_state(self):
+        self.get_logger().info(f'Entering state: {self.fsm.state}')
+
     def init_crazyflie(self):
         """
         Init crazyflie
         """
-        self.state = 'flying'
         self.mocap_pose = {}
 
-        self.controller = SE3Control(crazyflie_params)
-        self.trajectory = HoverTraj(x0=pos_des)
+        self.controller = SE3ControlCTBR(crazyflie_params)
 
         cflib.crtp.init_drivers()
 
@@ -97,7 +108,8 @@ class ControllerNode(Node):
             Odometry,
             '/mocap',
             self.mocap_clbk,
-            qos_best_effort
+            qos_best_effort,
+            callback_group=self.mocap_cgroup
         )
 
     def init_timers(self):
@@ -119,6 +131,12 @@ class ControllerNode(Node):
             UpdateSetpoint,
             'update_setpoint',
             self.update_setpoint_clbk)
+
+        # Trajectory
+        self.trajectory_srv = self.create_service(
+            Trigger,
+            'trajectory',
+            self.trajectory_clbk)
 
         # Landing
         self.land_srv = self.create_service(

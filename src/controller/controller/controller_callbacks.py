@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import time
+from threading import Lock
 
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point
@@ -9,80 +10,165 @@ from .controller_utils import odom_to_body
 
 from scipy.spatial.transform import Rotation
 
-def update_setpoint_clbk(self, request, response):
-    self.x_des = request.x
-    self.y_des = request.y
-    self.z_des = request.z
-    self.yaw_des = request.yaw
+from rotorpy.trajectories.hover_traj import HoverTraj
+from rotorpy.trajectories.circular_traj import CircularTraj
 
-    self.get_logger().info(f"Received new setpoint: ({self.x_des}, {self.y_des}, {self.z_des}, {self.yaw_des})")
+def update_setpoint_clbk(self, request, response):
+    if self.fsm.state == 'hovering':
+        self.get_logger().info(f"Received new setpoint: {x0}")
+    elif self.fsm.state == 'flying':
+        self.fsm.hovering()
+        self.get_logger().info(f"[FSM] Hovering at new setpoint: {x0}")
+    else:
+        self.get_logger().info("Cannot update setpoint from current state")
+        response.success = False
+        return response
+
+    x0 = np.array([request.x, request.y, request.z])
+    new_point = HoverTraj(x0=x0, yaw0=request.yaw).update(0)
+    with self.traj_lock:
+        self.flat_output = new_point
+
+    response.success = True
+
+    return response
+
+def trajectory_clbk(self, _, response):
+    if self.fsm.state != 'hovering':
+        self.get_logger().info("Cannot start trajectory from current state")
+        response.success = False
+        return response
+
+    self.logger.info(f"Starting circular trajectory")
+    self.fsm.flying()
+
+    with self.moca_lock:
+        state = self.mocap_pose
+
+    radius = 1.0
+    center = np.array([state['x'][0], state['x'][1] + radius, state['x'][2]])
+    freq = 0.1
+    yaw_bool = False
+    plane = 'XY'
+    direction = 'CCW'
+
+    circular_traj = CircularTraj(center=center, radius=radius, freq=freq, yaw_bool=yaw_bool, plane=plane, direction=direction)
+
+    t0 = time.time()
+    dt = 0
+    while dt < 10.0:
+        dt = time.time() - t0
+        with self.traj_lock:
+            self.flat_output = circular_traj.update(dt)
+        time.sleep(0.1)
+
+    self.logger.info(f"Finished circular trajectory")
+    self.fsm.hovering()
+
     response.success = True
 
     return response
 
 def takeoff_clbk(self, _, response):
-    self.flat_output = self.trajectory.update(0)
-    self.flat_output['x'] = [self.x_des, self.y_des, self.takeoff_height]
+    if self.mocap_pose == {}:
+        self.get_logger().info("Mocap data not available yet")
+        response.success = False
+        return response
 
-    self.state = 'flying'
+    if self.fsm.state != 'landed':
+        self.get_logger().info("Cannot takeoff from current state")
+        response.success = False
+        return response
+
+    t0 = time.time()
+
+    # Change FSM state
+    self.fsm.takeoff()
+    self.get_logger().info("[FSM] Taking off")
+
+    # Arm the Crazyflie
+    self.scf.cf.platform.send_arming_request(True)
+    time.sleep(1.0)
+
     # Unlock startup thrust protection
     self.scf.cf.commander.send_setpoint(0, 0, 0, 0)
+
+    with self.mocap_lock:
+        state = self.mocap_pose
+
+    x0 = [state['x'][0], state['x'][1], self.takeoff_height]
+    takeoff_point = HoverTraj(x0=x0).update(0)
+    with self.traj_lock:
+        self.flat_output = takeoff_point
+
+    while (time.time() - t0 < 3.0):
+        time.sleep(0.2)
+
+    # Change FSM state
+    self.fsm.in_position()
+    self.get_logger().info("[FSM] Hovering")
 
     response.success = True
 
     return response
 
 def landing_clbk(self, _, response):
-    self.t0 = time.time()
+    print(self.fsm.state)
+    if self.fsm.state == 'flying':
+        self.get_logger().info("[FSM] Hovering")
+        self.fsm.hovering()
 
-    self.flat_output = self.trajectory.update(0)
-    self.flat_output['x'] = [self.x_des, self.y_des, 0.05]
+        # Get the most recent mocap pose as hover point
+        with self.mocap_lock:
+            state = self.mocap_pose
 
-    self.state = 'landing'
+        hover_point = HoverTraj(x0=state['x']).update(0)
+        with self.traj:
+            self.flat_output = hover_point
+
+        time.sleep(1)
+
+    elif self.fsm.state != 'hovering':
+        self.get_logger().info("Cannot takeoff from current state")
+        response.success = False
+        return response
+
+    self.get_logger().info("[FSM] Landing")
+    self.fsm.land()
+
+    with self.mocap_lock:
+        state = self.mocap_pose
+
+    x0 = [state['x'][0], state['x'][1], 0.05]
+    landing_point = HoverTraj(x0=x0).update(0)
+    with self.traj_lock:
+        self.flat_output = landing_point
+
+    t0 = time.time()
+    while (time.time() - t0 < 3.0):
+        time.sleep(0.2)
+
+    for _ in range(30):
+        self.scf.cf.commander.send_setpoint(0, 0, 0, 0)
+        time.sleep(0.4)
+
+    self.get_logger().info("[FSM] Landed")
+    self.fsm.landing_complete()
+
     response.success = True
 
     return response
 
 def cmd_clbk(self):
-    if len(self.mocap_pose) == 0:
+    if self.fsm.state not in ['hovering', 'flying']:
         return
 
-    if not hasattr(self, 'first_time'):
-        self.first_time = False
+    with self.mocap_lock:
+        state = self.mocap_pose
+    with self.traj_lock:
+        traj = self.flat_output
 
-        # Arm the Crazyflie
-        self.scf.cf.platform.send_arming_request(True)
-        time.sleep(1.0)
-
-        # Unlock startup thrust protection
-        self.scf.cf.commander.send_setpoint(0, 0, 0, 0)
-
-        self.x_des = self.mocap_pose['x'][0]
-        self.y_des = self.mocap_pose['x'][1]
-        self.z_des = self.takeoff_height
-
-    if self.state == 'landing':
-        if time.time() - self.t0 > 2.0:
-            # self.scf.cf.commander.send_stop_setpoint()
-            for _ in range(30):
-                self.scf.cf.commander.send_setpoint(0, 0, 0, 0)
-                time.sleep(0.1)
-            print("Landed")
-            self.state = 'landed'
-            return
-
-    elif self.state == 'flying':
-        print("p: ", self.mocap_pose['x'])
-        print("v_b: ", self.mocap_pose['v'])
-        print("w_b: ", self.mocap_pose['w'])
-        print("q_wb: ", self.mocap_pose['q'])
-
-        self.flat_output = self.trajectory.update(0)
-        self.flat_output['x'] = [self.x_des, self.y_des, self.z_des]
-    else:
-        return
-
-    control = self.controller.update(0, self.mocap_pose, self.flat_output)
+    control = self.controller.update(0, state, traj)
 
     c1 = self.low_level_controller_c1
     c2 = self.low_level_controller_c2
@@ -110,75 +196,21 @@ def cmd_clbk(self):
 
     self.scf.cf.commander.send_setpoint(w_des[0], w_des[1], -w_des[2], thrust_pwm)  # FIXME
 
-    ########
-    # # Desired TRPY
-    # thrust_des_newtons = control['cmd_thrust']
-    # thrust_des_grams = thrust_des_newtons / 9.81 * 1000
-    # q_des = control['cmd_q']
-    # R_des = Rotation.from_quat(q_des).as_matrix()
-    # eul_des = Rotation.from_quat(q_des).as_euler('ZXY', degrees=True)
-    # yaw_des = eul_des[0]
-
-    # # Current RPY
-    # R_cur = Rotation.from_quat(self.state['q'])
-    # eul_cur = R_cur.as_euler('ZXY', degrees=True)
-    # yaw_cur = eul_cur[0]
-
-    # # Map the desired onto the current body frame based on yaw
-    # R_z = Rotation.from_rotvec((yaw_cur - yaw_des)*(np.pi/180)*np.array([0,0,1])).as_matrix()
-    # R_des_new = R_des@R_z
-
-    # pitch_des = -np.arcsin(R_des_new[2,0])*180/np.pi
-    # roll_des = np.arctan2(R_des_new[2,1], R_des_new[2,2])*180/np.pi
-
-    # e_yaw = yaw_des - yaw_cur
-    # if e_yaw > 180:
-    #     e_yaw -= 360
-    # elif e_yaw < -180:
-    #     e_yaw += 360
-    # yaw_rate_des = -kyaw * e_yaw
-
-    # if c3 + thrust_des_grams < 0:
-    #     print("Thrust too negative")
-    #     thrust_des_grams = 0
-    # thrust_pwm = c1 + c2 * (c3 + thrust_des_grams)**.5
-    # thrust_pwm = int(min(max(0.0, thrust_pwm), 0.9) * thrust_pwm_max)
-
-    # self.scf.cf.commander.send_setpoint(roll_des, pitch_des, yaw_rate_des, thrust_pwm)
-
-
 def mocap_clbk(self, msg: Odometry):
     """
     Mocap odometry callback
     """
-
-    # x = msg.pose.pose.position.x
-    # y = msg.pose.pose.position.y
-    # z = msg.pose.pose.position.z
-    # self.position = np.array([x, y, z])
-    # qx = msg.pose.pose.orientation.x
-    # qy = msg.pose.pose.orientation.y
-    # qz = msg.pose.pose.orientation.z
-    # qw = msg.pose.pose.orientation.w
-    # self.quat = np.array([qx, qy, qz, qw])
-    # vx = msg.twist.twist.linear.x
-    # vy = msg.twist.twist.linear.y
-    # vz = msg.twist.twist.linear.z
-    # self.velocity = np.array([vx, vy, vz])
-    # wx = msg.twist.twist.angular.x
-    # wy = msg.twist.twist.angular.y
-    # wz = msg.twist.twist.angular.z
-    # self.angular_velocity = np.array([wx, wy, wz])
-    # print("Position: ", self.position)
-    # print("Quaternion: ", self.quat)
-    # print("Velocity: ", self.velocity)
-    # print("Angular velocity: ", self.angular_velocity)
-    # print()
-    # parse msg
     p, v_b, w_b, R_wb, quat_wb = odom_to_body(msg)
 
-    self.mocap_pose['x'] = p
-    self.mocap_pose['v'] = v_b
-    self.mocap_pose['w'] = w_b
-    self.mocap_pose['R'] = R_wb
-    self.mocap_pose['q'] = quat_wb
+    print("Position: ", p)
+    # print("Velocity: ", v_b)
+    # print("Angular velocity: ", w_b)
+    # print("Rotation matrix: ", R_wb)
+    # print("Quaternion: ", quat_wb)
+
+    with self.mocap_lock:
+        self.mocap_pose['x'] = p
+        self.mocap_pose['v'] = v_b
+        self.mocap_pose['w'] = w_b
+        self.mocap_pose['R'] = R_wb
+        self.mocap_pose['q'] = quat_wb

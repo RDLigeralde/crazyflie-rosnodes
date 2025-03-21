@@ -154,5 +154,16 @@
     "**/zshenv": true,
     "**/*.zsh-theme": true
   },
-  "ros.distro": "jazzy"
+  "ros.distro": "jazzy",
+  "cSpell.words": [
+    "clbk",
+    "crazyflie",
+    "crazyradio",
+    "crtp",
+    "CTBR",
+    "mocap",
+    "setpoint",
+    "takingoff",
+    "Traj"
+  ]
 }

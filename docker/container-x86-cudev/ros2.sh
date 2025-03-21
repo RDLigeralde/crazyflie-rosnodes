@@ -280,3 +280,7 @@ function ros2bag {
     return 0
   fi
 }
+
+alias land='ros2 service call /crazy_jirl_01/land std_srvs/srv/Trigger'
+alias takeoff='ros2 service call /crazy_jirl_01/takeoff std_srvs/srv/Trigger'
+alias circle='ros2 service call /crazy_jirl_01/trajectory std_srvs/srv/Trigger'

@@ -1,6 +1,6 @@
 /crazy_jirl_01/controller:
   ros__parameters:
-    crazyradio_uri: radio://0/80/2M/E7E7E7E701
+    crazyradio_uri: radio://0/80/2M/E7E7E70101
     control_freq: 100
     takeoff_height: 0.5
     low_level_controller:

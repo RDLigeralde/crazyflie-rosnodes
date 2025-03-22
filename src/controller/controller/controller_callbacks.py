@@ -99,9 +99,9 @@ def logger_clbk(self):
         print(log_entry)
         timestamp = log_entry[0]
         data = log_entry[1]
-        logconf_name = log_entry[2]
+        name = log_entry[2]
 
-        self.get_logger().info('[%d][%s]: %.3s' % (timestamp, logconf_name, data))
+        self.get_logger().info('[%d][%s]: %.3s' % (timestamp, name, data))
 
 def mocap_clbk(self, msg: Odometry):
     """

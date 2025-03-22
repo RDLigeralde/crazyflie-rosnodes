@@ -13,13 +13,18 @@ from visualization_msgs.msg import MarkerArray
 from jirl_interfaces.srv import UpdateSetpoint
 
 from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
+from rotorpy.controllers.policy_controller import PolicyControl
+
 from rotorpy.trajectories.hover_traj import HoverTraj
 from rotorpy.vehicles.crazyflie_params import quad_params as crazyflie_params
 
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
+from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
+from cflib.crazyflie.syncLogger import SyncLogger
 from cflib.utils import uri_helper
+from cflib.crazyflie.log import LogConfig
 
 import torch
 
@@ -27,6 +32,7 @@ from .controller_qos import qos_best_effort, qos_reliable
 from .controller_fsm import ControllerFSM
 
 device = torch.device('cpu')
+mocap_pose = {}
 
 class ControllerNode(Node):
 
@@ -69,13 +75,10 @@ class ControllerNode(Node):
         """
         Init crazyflie
         """
-        from cflib.crazyflie.log import LogConfig
-        from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
-        from cflib.crazyflie.syncLogger import SyncLogger
-
-        self.mocap_pose = {}
-
-        self.controller = SE3ControlCTBR(crazyflie_params)
+        if self.policy_enabled:
+            self.controller = PolicyControl(crazyflie_params, self.policy_path)
+        else:
+            self.controller = SE3ControlCTBR(crazyflie_params)
 
         cflib.crtp.init_drivers()
 

@@ -12,6 +12,8 @@ def init_parameters(self):
                     ('low_level_controller.c3', 0.0),
                     ('low_level_controller.thrust_pwm_min', 0),
                     ('low_level_controller.thrust_pwm_max', 0),
+                    ('policy.enable', False),
+                    ('policy.path', ''),
                     ('takeoff_height', 0.5),
                     ])
 
@@ -23,6 +25,8 @@ def init_parameters(self):
     self.low_level_controller_c3 = self.get_parameter('low_level_controller.c3').value
     self.low_level_controller_thrust_pwm_min = self.get_parameter('low_level_controller.thrust_pwm_min').value
     self.low_level_controller_thrust_pwm_max = self.get_parameter('low_level_controller.thrust_pwm_max').value
+    self.policy_enabled = self.get_parameter('policy.enable').value
+    self.policy_path = self.get_parameter('policy.path').value
     self.takeoff_height = self.get_parameter('takeoff_height').value
 
     # Print parameters
@@ -33,4 +37,6 @@ def init_parameters(self):
     self.get_logger().info(f'logger_period_ms: {self.logger_period_ms}')
     self.get_logger().info(f'thrust_pwm_min: {self.low_level_controller_thrust_pwm_min}')
     self.get_logger().info(f'thrust_pwm_max: {self.low_level_controller_thrust_pwm_max}')
+    self.get_logger().info(f'policy_enabled: {self.policy_enabled}')
+    self.get_logger().info(f'policy_path: {self.policy_path}')
     self.get_logger().info(f'takeoff_height: {self.takeoff_height}')

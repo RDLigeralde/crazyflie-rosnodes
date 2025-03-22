@@ -76,7 +76,7 @@ class ControllerNode(Node):
         Init crazyflie
         """
         if self.policy_enabled:
-            self.controller = PolicyControl(crazyflie_params, self.policy_path)
+            self.controller = PolicyControl(crazyflie_params, self.policy_path, device=self.device)
         else:
             self.controller = SE3ControlCTBR(crazyflie_params)
 

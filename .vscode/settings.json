@@ -98,8 +98,8 @@
     "/opt/ros/jazzy/lib/python3.12/site-packages/",
     "/opt/ros/jazzy/local/lib/python3.12/dist-packages/",
     "/opt/ros/dua-utils/install/lib/python3.12/site-packages/",
-    "/opt/ros/dua-utils/install/local/lib/python3.12/dist-packages/"
-    // Add your own paths here!
+    "/opt/ros/dua-utils/install/local/lib/python3.12/dist-packages/",
+    "./src/rotorpy"
   ],
   // Autocomplete from ros python packages
   "python.autoComplete.extraPaths": [
@@ -157,22 +157,37 @@
   "ros.distro": "jazzy",
   "cSpell.words": [
     "cbuild",
+    "cflib",
     "clbk",
+    "coeff",
     "colcon",
     "crazyflie",
     "crazyradio",
     "crtp",
     "CTBR",
+    "ddddot",
+    "dddot",
+    "ddot",
+    "dpos",
     "Eigen",
+    "hstack",
     "jirl",
     "kalman",
+    "linalg",
     "mocap",
+    "multirotor",
     "Odometry",
+    "quadcopter",
+    "quadrotor",
     "qualisys",
     "Quaterniond",
     "RCLCPP",
+    "rclpy",
+    "rotorpy",
     "setpoint",
+    "srvs",
     "takingoff",
-    "Traj"
+    "Traj",
+    "vbat"
   ]
 }

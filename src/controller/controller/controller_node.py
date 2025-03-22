@@ -32,7 +32,7 @@ class ControllerNode(Node):
 
     # Import methods
     from .controller_params import init_parameters
-    from .controller_callbacks import mocap_clbk, cmd_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk
+    from .controller_callbacks import mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk
     # from .controller_utils import
 
     mocap_lock = Lock()
@@ -47,12 +47,13 @@ class ControllerNode(Node):
         self.init_crazyflie()
         self.init_callback_groups()
         self.init_services()
-        self.init_timers()
+        #self.init_timers()
         self.init_subscriptions()
 
         self.get_logger().info('Node initialized')
 
     def cleanup(self):
+        self.sync_logger.disconnect()
         self.scf.close_link()
 
     def init_fsm(self):
@@ -68,6 +69,10 @@ class ControllerNode(Node):
         """
         Init crazyflie
         """
+        from cflib.crazyflie.log import LogConfig
+        from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
+        from cflib.crazyflie.syncLogger import SyncLogger
+
         self.mocap_pose = {}
 
         self.controller = SE3ControlCTBR(crazyflie_params)
@@ -77,6 +82,12 @@ class ControllerNode(Node):
         URI = uri_helper.uri_from_env(default=self.crazyradio_uri)
         self.scf = SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache'))
         self.scf.open_link()
+
+        # Init logger
+        lg = LogConfig(name='Logger', period_in_ms=self.logger_period_ms)
+        lg.add_variable('pm.vbat', 'float')
+        self.sync_logger = SyncLogger(self.scf, lg)
+        self.sync_logger.connect()
 
     def init_callback_groups(self):
         """
@@ -116,9 +127,9 @@ class ControllerNode(Node):
         """
         Init timers
         """
-        self.cmd_timer = self.create_timer(
-            1 / self.control_freq,
-            lambda: self.cmd_clbk(),
+        self.logger_timer = self.create_timer(
+            self.logger_period_ms / 1000,
+            lambda: self.logger_clbk(),
             callback_group=self.cmd_cgroup
         )
 

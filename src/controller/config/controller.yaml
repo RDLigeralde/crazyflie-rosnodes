@@ -1,11 +1,11 @@
 /crazy_jirl_01/controller:
   ros__parameters:
     crazyradio_uri: radio://0/80/2M/E7E7E70101
-    control_freq: 100
-    takeoff_height: 0.5
+    logger_period_ms: 1000
     low_level_controller:
       c1: -0.6709
       c2: 0.1932
       c3: 13.0652
-      thrust_pwm_min: 20000
+      thrust_pwm_min: 10001
       thrust_pwm_max: 60000
+    takeoff_height: 1.0

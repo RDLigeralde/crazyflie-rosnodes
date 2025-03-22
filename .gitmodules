@@ -1,3 +1,6 @@
 [submodule "src/rotorpy"]
 	path = src/rotorpy
 	url = git@github.com:Jirl-upenn/rotorpy.git
+[submodule "src/motion_capture_system"]
+	path = src/motion_capture_system
+	url = git@github.com:Jirl-upenn/motion_capture_system.git

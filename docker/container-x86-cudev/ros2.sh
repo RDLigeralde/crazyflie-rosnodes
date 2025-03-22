@@ -284,3 +284,10 @@ function ros2bag {
 alias land='ros2 service call /crazy_jirl_01/land std_srvs/srv/Trigger'
 alias takeoff='ros2 service call /crazy_jirl_01/takeoff std_srvs/srv/Trigger'
 alias circle='ros2 service call /crazy_jirl_01/trajectory std_srvs/srv/Trigger'
+update_setpoint() {
+    if [ "$#" -ne 4 ]; then
+        echo "Usage: update_setpoint x y z yaw"
+        return 1
+    fi
+    ros2 service call /crazy_jirl_01/update_setpoint jirl_interfaces/srv/UpdateSetpoint "{x: $1, y: $2, z: $3, yaw: $4}"
+}

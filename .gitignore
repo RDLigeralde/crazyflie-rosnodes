@@ -3,6 +3,8 @@ build/*
 install/*
 log/*
 
+cache/*
+
 # Uncomment the following to avoid pushing personal configurations
 # .vscode/
 

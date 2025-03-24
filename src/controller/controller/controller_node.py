@@ -10,7 +10,7 @@ from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Trigger
 from visualization_msgs.msg import MarkerArray
-from jirl_interfaces.srv import UpdateSetpoint
+from jirl_interfaces.srv import UpdateSetpoint, Trajectory
 
 from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
 from rotorpy.controllers.policy_controller import PolicyControl
@@ -32,7 +32,6 @@ from .controller_qos import qos_best_effort, qos_reliable
 from .controller_fsm import ControllerFSM
 
 device = torch.device('cpu')
-mocap_pose = {}
 
 class ControllerNode(Node):
 
@@ -43,6 +42,7 @@ class ControllerNode(Node):
 
     mocap_lock = Lock()
     traj_lock = Lock()
+    mocap_pose = {}
 
     def __init__(self):
         super().__init__('controller')
@@ -50,7 +50,7 @@ class ControllerNode(Node):
         self.init_parameters()
         self.init_fsm()
         self.init_publishers()
-        self.init_crazyflie()
+        # self.init_crazyflie()
         self.init_callback_groups()
         self.init_services()
         #self.init_timers()
@@ -148,7 +148,7 @@ class ControllerNode(Node):
 
         # Trajectory
         self.trajectory_srv = self.create_service(
-            Trigger,
+            Trajectory,
             'trajectory',
             self.trajectory_clbk)
 

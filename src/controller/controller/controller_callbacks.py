@@ -8,7 +8,7 @@ from geometry_msgs.msg import Point
 
 from .controller_utils import odom_to_body
 
-from scipy.spatial.transform import Rotation
+from jirl_interfaces.srv import UpdateSetpoint, Trajectory
 
 from rotorpy.trajectories.hover_traj import HoverTraj
 from rotorpy.trajectories.circular_traj import CircularTraj
@@ -32,7 +32,7 @@ def update_setpoint_clbk(self, request, response):
     response.success = True
     return response
 
-def trajectory_clbk(self, _, response):
+def trajectory_clbk(self, request, response):
     if self.fsm.state != 'hovering':
         self.get_logger().info("Cannot start trajectory from current state")
         response.success = False
@@ -41,16 +41,24 @@ def trajectory_clbk(self, _, response):
     state = self.mocap_pose
     self.t0 = time.time()
 
-    radius = 1.0
-    center = np.array([state['x'][0] - radius, state['x'][1], state['x'][2]])
-    freq = 0.2
-    yaw_bool = False
-    plane = 'XY'
-    direction = 'CCW'
+    if request.trajectory_type == Trajectory.CIRCLE:
+        center = np.array([state['x'][0] - radius, state['x'][1], state['x'][2]])
+        radius = request.radius
+        freq = request.freq
+        yaw_bool = request.direction
+        if request.plane == Trajectory.PLANE_XY:
+            plane = 'XY'
+        elif request.plane == Trajectory.PLANE_YZ:
+            plane = 'YZ'
+        elif request.plane == Trajectory.PLANE_XZ:
+            plane = 'XZ'
+        direction = 'CW' if request.direction == Trajectory.DIR_CW else 'CCW'
+        self.traj_duration = request.duration
 
-    self.trajectory = CircularTraj(center=center, radius=radius, freq=freq, yaw_bool=yaw_bool, plane=plane, direction=direction)
+        self.trajectory = CircularTraj(center=center, radius=radius, freq=freq, yaw_bool=yaw_bool, plane=plane, direction=direction)
 
-    self.get_logger().info(f"Starting circular trajectory")
+        self.get_logger().info(f"Starting circular trajectory")
+
     self.fsm.move()
 
     response.success = True
@@ -151,7 +159,7 @@ def mocap_clbk(self, msg: Odometry):
 
             return
     elif self.fsm.state == 'flying':
-        if self.dt > 10.0:
+        if self.dt > self.traj_duration:
             self.get_logger().info(f"Finished circular trajectory")
             self.fsm.stop()
 

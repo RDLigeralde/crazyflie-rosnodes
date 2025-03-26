@@ -5,7 +5,8 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Trigger
-from jirl_interfaces.srv import UpdateSetpoint, Trajectory, CommandCTBR
+from jirl_interfaces.msg import CommandCTBR
+from jirl_interfaces.srv import UpdateSetpoint, Trajectory
 
 from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
 from rotorpy.controllers.policy_controller import PolicyControl
@@ -22,7 +23,7 @@ class ControllerNode(Node):
     # Import methods
     from .controller_params import init_parameters
     from .controller_callbacks import mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk
-    # from .controller_utils import
+    from .controller_utils import send_ctbr_command
 
     mocap_lock = Lock()
     traj_lock = Lock()
@@ -43,8 +44,7 @@ class ControllerNode(Node):
         self.get_logger().info('Node initialized')
 
     def cleanup(self):
-        self.sync_logger.disconnect()
-        self.scf.close_link()
+        pass
 
     def init_fsm(self):
         """

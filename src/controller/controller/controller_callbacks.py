@@ -5,7 +5,8 @@ from nav_msgs.msg import Odometry
 
 from .controller_utils import odom_to_body
 
-from jirl_interfaces.srv import CommandCTBR, Trajectory
+from jirl_interfaces.msg import CommandCTBR
+from jirl_interfaces.srv import Trajectory
 
 from rotorpy.trajectories.hover_traj import HoverTraj
 from rotorpy.trajectories.circular_traj import CircularTraj
@@ -76,7 +77,7 @@ def takeoff_clbk(self, _, response):
     self.dt = 0.0
 
     # Unlock startup thrust protection
-    self.scf.cf.commander.send_setpoint(0, 0, 0, 0)
+    self.send_ctbr_command(0, 0.0, 0.0, 0.0)
 
     # Change FSM state
     self.fsm.takeoff()
@@ -148,7 +149,7 @@ def mocap_clbk(self, msg: Odometry):
 
         if (time.time() - self.t0 > 3.0):
             for _ in range(30):
-                self.scf.cf.commander.send_setpoint(0, 0, 0, 0)
+                self.send_ctbr_command(0, 0.0, 0.0, 0.0)
                 time.sleep(0.1)
 
             self.get_logger().info("[FSM] Landed")
@@ -183,12 +184,5 @@ def mocap_clbk(self, msg: Odometry):
 
     w_des = control['cmd_w']        # deg/s
 
-    # Prepare message
-    msg = CommandCTBR()
-    msg.crazyflie_name = self.get_namespace()
-    msg.thrust_pwm = thrust_pwm
-    msg.roll_rate = w_des[0]
-    msg.pitch_rate = w_des[1]
-    msg.yaw_rate = w_des[2]
-
-    self.cmd_pub.publish(msg)
+    # Send msg
+    self.send_ctbr_command(thrust_pwm, w_des[0], w_des[1], w_des[2])

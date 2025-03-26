@@ -6,6 +6,6 @@
     ]
     crazyradio_uris: [
       radio://0/80/2M/E7E7E70101,
-      radio://0/8\/2M/E7E7E70102,
+      radio://0/81/2M/E7E7E70102,
     ]
     logger_period_ms: 1000

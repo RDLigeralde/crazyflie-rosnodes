@@ -31,8 +31,6 @@ import torch
 from .controller_qos import qos_best_effort, qos_reliable
 from .controller_fsm import ControllerFSM
 
-device = torch.device('cpu')
-
 class ControllerNode(Node):
 
     # Import methods
@@ -43,6 +41,7 @@ class ControllerNode(Node):
     mocap_lock = Lock()
     traj_lock = Lock()
     mocap_pose = {}
+    device = torch.device('cpu')
 
     def __init__(self):
         super().__init__('controller')
@@ -50,7 +49,7 @@ class ControllerNode(Node):
         self.init_parameters()
         self.init_fsm()
         self.init_publishers()
-        # self.init_crazyflie()
+        self.init_crazyflie()
         self.init_callback_groups()
         self.init_services()
         #self.init_timers()

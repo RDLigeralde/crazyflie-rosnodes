@@ -41,18 +41,18 @@ def trajectory_clbk(self, request, response):
     state = self.mocap_pose
     self.t0 = time.time()
 
-    if request.trajectory_type == Trajectory.CIRCLE:
-        center = np.array([state['x'][0] - radius, state['x'][1], state['x'][2]])
+    if request.trajectory_type == Trajectory.Request.CIRCLE:
         radius = request.radius
+        center = np.array([state['x'][0] - radius, state['x'][1], state['x'][2]])
         freq = request.freq
         yaw_bool = request.direction
-        if request.plane == Trajectory.PLANE_XY:
+        if request.plane == Trajectory.Request.PLANE_XY:
             plane = 'XY'
-        elif request.plane == Trajectory.PLANE_YZ:
+        elif request.plane == Trajectory.Request.PLANE_YZ:
             plane = 'YZ'
-        elif request.plane == Trajectory.PLANE_XZ:
+        elif request.plane == Trajectory.Request.PLANE_XZ:
             plane = 'XZ'
-        direction = 'CW' if request.direction == Trajectory.DIR_CW else 'CCW'
+        direction = 'CW' if request.direction == Trajectory.Request.DIR_CW else 'CCW'
         self.traj_duration = request.duration
 
         self.trajectory = CircularTraj(center=center, radius=radius, freq=freq, yaw_bool=yaw_bool, plane=plane, direction=direction)

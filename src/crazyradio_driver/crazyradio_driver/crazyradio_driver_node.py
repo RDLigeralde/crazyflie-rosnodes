@@ -17,7 +17,7 @@ class CrazyradioDriverNode(Node):
 
     # Import methods
     from .crazyradio_driver_params import init_parameters
-    from .crazyradio_driver_callbacks import cmd_clbk
+    from .crazyradio_driver_callbacks import cmd_clbk #, logger_clbk
 
     def __init__(self):
         super().__init__('crazyradio_driver')
@@ -25,7 +25,7 @@ class CrazyradioDriverNode(Node):
         self.init_parameters()
         self.init_crazyflie()
         self.init_callback_groups()
-        self.init_timers()
+        # self.init_timers()
         self.init_subscriptions()
 
         self.get_logger().info('Node initialized')
@@ -76,12 +76,12 @@ class CrazyradioDriverNode(Node):
             callback_group=self.cmd_cgroup
         )
 
-    def init_timers(self):
-        """
-        Init timers
-        """
-        self.logger_timer = self.create_timer(
-            self.logger_period_ms / 1000,
-            lambda: self.logger_clbk(),
-            callback_group=self.logger_cgroup
-        )
+    # def init_timers(self):
+    #     """
+    #     Init timers
+    #     """
+    #     self.logger_timer = self.create_timer(
+    #         self.logger_period_ms / 1000,
+    #         lambda: self.logger_clbk(),
+    #         callback_group=self.logger_cgroup
+    #     )

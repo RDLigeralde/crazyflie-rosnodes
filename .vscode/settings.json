@@ -183,6 +183,7 @@
     "Quaterniond",
     "RCLCPP",
     "rclpy",
+    "remappings",
     "rotorpy",
     "setpoint",
     "srvs",

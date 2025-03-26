@@ -5,9 +5,7 @@ def init_parameters(self):
     # Declare parameters
     self.declare_parameters(
         namespace='',
-        parameters=[('crazyradio_uri', ''),
-                    ('logger_period_ms', 0),
-                    ('low_level_controller.c1', 0.0),
+        parameters=[('low_level_controller.c1', 0.0),
                     ('low_level_controller.c2', 0.0),
                     ('low_level_controller.c3', 0.0),
                     ('low_level_controller.thrust_pwm_min', 0),
@@ -18,8 +16,6 @@ def init_parameters(self):
                     ])
 
     # Get parameters
-    self.crazyradio_uri = self.get_parameter('crazyradio_uri').value
-    self.logger_period_ms = self.get_parameter('logger_period_ms').value
     self.low_level_controller_c1 = self.get_parameter('low_level_controller.c1').value
     self.low_level_controller_c2 = self.get_parameter('low_level_controller.c2').value
     self.low_level_controller_c3 = self.get_parameter('low_level_controller.c3').value
@@ -30,11 +26,9 @@ def init_parameters(self):
     self.takeoff_height = self.get_parameter('takeoff_height').value
 
     # Print parameters
-    self.get_logger().info(f'crazyradio_uri: {self.crazyradio_uri}')
     self.get_logger().info(f'c1: {self.low_level_controller_c1}')
     self.get_logger().info(f'c2: {self.low_level_controller_c2}')
     self.get_logger().info(f'c3: {self.low_level_controller_c3}')
-    self.get_logger().info(f'logger_period_ms: {self.logger_period_ms}')
     self.get_logger().info(f'thrust_pwm_min: {self.low_level_controller_thrust_pwm_min}')
     self.get_logger().info(f'thrust_pwm_max: {self.low_level_controller_thrust_pwm_max}')
     self.get_logger().info(f'policy_enabled: {self.policy_enabled}')

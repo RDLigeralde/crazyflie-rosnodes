@@ -1,14 +1,11 @@
-import os
 import numpy as np
 import time
-from threading import Lock
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Point
 
 from .controller_utils import odom_to_body
 
-from jirl_interfaces.srv import UpdateSetpoint, Trajectory
+from jirl_interfaces.srv import CommandCTBR, Trajectory
 
 from rotorpy.trajectories.hover_traj import HoverTraj
 from rotorpy.trajectories.circular_traj import CircularTraj
@@ -186,4 +183,12 @@ def mocap_clbk(self, msg: Odometry):
 
     w_des = control['cmd_w']        # deg/s
 
-    self.scf.cf.commander.send_setpoint(w_des[0], w_des[1], -w_des[2], thrust_pwm)  # FIXME
+    # Prepare message
+    msg = CommandCTBR()
+    msg.crazyflie_name = self.get_namespace()
+    msg.thrust_pwm = thrust_pwm
+    msg.roll_rate = w_des[0]
+    msg.pitch_rate = w_des[1]
+    msg.yaw_rate = w_des[2]
+
+    self.cmd_pub.publish(msg)

@@ -1,7 +1,5 @@
 /crazy_jirl_01/controller:
   ros__parameters:
-    crazyradio_uri: radio://0/80/2M/E7E7E70101
-    logger_period_ms: 1000
     low_level_controller:
       c1: -0.6709
       c2: 0.1932
@@ -15,8 +13,6 @@
 
 /crazy_jirl_02/controller:
   ros__parameters:
-    crazyradio_uri: radio://0/81/2M/E7E7E70102
-    logger_period_ms: 1000
     low_level_controller:
       c1: -0.6709
       c2: 0.1932

@@ -1,0 +1,5 @@
+<library path="rviz2_quad_plugin">
+  <class name="QuadPanel" type="rviz2_quad_plugin::QuadPanel" base_class_type="rviz_common::Panel">
+    <description>RViz2 panel for using Crazyflie drone</description>
+  </class>
+</library>

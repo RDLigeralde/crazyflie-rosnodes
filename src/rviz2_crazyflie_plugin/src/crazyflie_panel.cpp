@@ -1,14 +1,14 @@
-#include <quad_panel.hpp>
+#include <crazyflie_panel.hpp>
 
-namespace rviz2_quad_plugin
+namespace rviz2_crazyflie_plugin
 {
 
-QuadPanel::QuadPanel(QWidget* parent)
+CrazyfliePanel::CrazyfliePanel(QWidget* parent)
 : rviz_common::Panel(parent),
   last_radius_(0.0), last_frequency_(0.0), last_duration_(0.0), last_direction_(false), last_plane_(0)
 {
   // Create ROS2 node
-  node_ = std::make_shared<rclcpp::Node>("quad_panel");
+  node_ = std::make_shared<rclcpp::Node>("crazyflie_panel");
 
   drone_name_ = new QLineEdit("crazy_jirl_01");
   QHBoxLayout *drone_name_layout = new QHBoxLayout();
@@ -19,9 +19,9 @@ QuadPanel::QuadPanel(QWidget* parent)
   takeoff_button_ = new QPushButton("Takeoff");
   setpoint_button_ = new QPushButton("Set Setpoint");
 
-  connect(land_button_, &QPushButton::clicked, this, &QuadPanel::callLand);
-  connect(takeoff_button_, &QPushButton::clicked, this, &QuadPanel::callTakeoff);
-  connect(setpoint_button_, &QPushButton::clicked, this, &QuadPanel::callUpdateSetpoint);
+  connect(land_button_, &QPushButton::clicked, this, &CrazyfliePanel::callLand);
+  connect(takeoff_button_, &QPushButton::clicked, this, &CrazyfliePanel::callTakeoff);
+  connect(setpoint_button_, &QPushButton::clicked, this, &CrazyfliePanel::callUpdateSetpoint);
 
   // Input Setpoint
   x_input_ = new QLineEdit();
@@ -44,7 +44,7 @@ QuadPanel::QuadPanel(QWidget* parent)
   trajectory_selector_->addItem("Select Trajectory");
   trajectory_selector_->addItem("Circle");
 
-  connect(trajectory_selector_, QOverload<int>::of(&QComboBox::activated), this, &QuadPanel::handleTrajectorySelection);
+  connect(trajectory_selector_, QOverload<int>::of(&QComboBox::activated), this, &CrazyfliePanel::handleTrajectorySelection);
 
   // Status label
   status_label_ = new QLabel("Status: Ready");
@@ -66,7 +66,7 @@ QuadPanel::QuadPanel(QWidget* parent)
   setLayout(main_layout);
 }
 
-void QuadPanel::callLand() {
+void CrazyfliePanel::callLand() {
   std::string ns = "/" + drone_name_->text().toStdString();
   auto client = node_->create_client<std_srvs::srv::Trigger>(ns + "/land");
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
@@ -83,7 +83,7 @@ void QuadPanel::callLand() {
   handleServiceResponse(success, "Land");
 }
 
-void QuadPanel::callTakeoff() {
+void CrazyfliePanel::callTakeoff() {
   std::string ns = "/" + drone_name_->text().toStdString();
   auto client = node_->create_client<std_srvs::srv::Trigger>(ns + "/takeoff");
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
@@ -100,7 +100,7 @@ void QuadPanel::callTakeoff() {
   handleServiceResponse(success, "Takeoff");
 }
 
-void QuadPanel::callUpdateSetpoint() {
+void CrazyfliePanel::callUpdateSetpoint() {
   std::string ns = "/" + drone_name_->text().toStdString();
   auto client = node_->create_client<UpdateSetpoint>(ns + "/update_setpoint");
   auto request = std::make_shared<UpdateSetpoint::Request>();
@@ -122,13 +122,13 @@ void QuadPanel::callUpdateSetpoint() {
   handleServiceResponse(success, "UpdateSetpoint");
 }
 
-void QuadPanel::handleTrajectorySelection(int index) {
+void CrazyfliePanel::handleTrajectorySelection(int index) {
   if (trajectory_selector_->itemText(index) == "Circle") {
     openCircleConfig();
   }
 }
 
-void QuadPanel::openCircleConfig() {
+void CrazyfliePanel::openCircleConfig() {
   circle_config_dialog_ = new QDialog(this);
   circle_config_dialog_->setWindowTitle("Circle Trajectory Configuration");
 
@@ -150,7 +150,7 @@ void QuadPanel::openCircleConfig() {
   plane_selector_->setCurrentIndex(last_plane_);
 
   confirm_circle_button_ = new QPushButton("Start Circle");
-  connect(confirm_circle_button_, &QPushButton::clicked, this, &QuadPanel::callCircleTrajectory);
+  connect(confirm_circle_button_, &QPushButton::clicked, this, &CrazyfliePanel::callCircleTrajectory);
 
   QFormLayout *form_layout = new QFormLayout();
   form_layout->addRow("Radius:", radius_input_);
@@ -167,7 +167,7 @@ void QuadPanel::openCircleConfig() {
   circle_config_dialog_->exec();
 }
 
-void QuadPanel::callCircleTrajectory() {
+void CrazyfliePanel::callCircleTrajectory() {
   std::string ns = "/" + drone_name_->text().toStdString();
   auto client = node_->create_client<Trajectory>(ns + "/trajectory");
   auto request = std::make_shared<Trajectory::Request>();
@@ -201,7 +201,7 @@ void QuadPanel::callCircleTrajectory() {
   circle_config_dialog_->close();
 }
 
-void QuadPanel::handleServiceResponse(bool success, const std::string &service_name) {
+void CrazyfliePanel::handleServiceResponse(bool success, const std::string &service_name) {
   if (success) {
     status_label_->setText(QString::fromStdString("Status: " + service_name + " OK"));
     status_label_->setStyleSheet("QLabel { color: green; }");
@@ -211,7 +211,7 @@ void QuadPanel::handleServiceResponse(bool success, const std::string &service_n
   }
 }
 
-}  // namespace rviz2_quad_plugin
+}  // namespace rviz2_crazyflie_plugin
 
 #include <pluginlib/class_list_macros.hpp>
-PLUGINLIB_EXPORT_CLASS(rviz2_quad_plugin::QuadPanel, rviz_common::Panel)
+PLUGINLIB_EXPORT_CLASS(rviz2_crazyflie_plugin::CrazyfliePanel, rviz_common::Panel)

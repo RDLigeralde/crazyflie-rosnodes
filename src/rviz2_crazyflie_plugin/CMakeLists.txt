@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(rviz2_quad_plugin)
+project(rviz2_crazyflie_plugin)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -24,18 +24,18 @@ find_package(std_srvs REQUIRED)
 
 set(CMAKE_AUTOMOC ON)
 qt5_wrap_cpp(MOC_FILES
-  include/quad_panel.hpp
+  include/crazyflie_panel.hpp
 )
 
-add_library(rviz2_quad_plugin SHARED
-  src/quad_panel.cpp
+add_library(rviz2_crazyflie_plugin SHARED
+  src/crazyflie_panel.cpp
   ${MOC_FILES}
 )
-target_include_directories(rviz2_quad_plugin PUBLIC
+target_include_directories(rviz2_crazyflie_plugin PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-ament_target_dependencies(rviz2_quad_plugin
+ament_target_dependencies(rviz2_crazyflie_plugin
   jirl_interfaces
   pluginlib
   rviz_common
@@ -44,7 +44,7 @@ ament_target_dependencies(rviz2_quad_plugin
 )
 
 install(
-  TARGETS rviz2_quad_plugin
+  TARGETS rviz2_crazyflie_plugin
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
@@ -56,12 +56,12 @@ install(
 )
 
 install(
-  FILES rviz2_quad_plugin.xml
+  FILES rviz2_crazyflie_plugin.xml
   DESTINATION share/${PROJECT_NAME}
 )
 
 ament_export_include_directories(include)
-pluginlib_export_plugin_description_file(rviz_common rviz2_quad_plugin.xml)
+pluginlib_export_plugin_description_file(rviz_common rviz2_crazyflie_plugin.xml)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

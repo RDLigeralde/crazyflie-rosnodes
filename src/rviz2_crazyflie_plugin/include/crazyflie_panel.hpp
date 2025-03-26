@@ -1,5 +1,5 @@
-#ifndef RVIZ2_QUAD_PLUGIN__QUAD_PANEL_HPP
-#define RVIZ2_QUAD_PLUGIN__QUAD_PANEL_HPP
+#ifndef RVIZ2_CRAZYFLIE_PLUGIN__CRAZYFLIE_PANEL_HPP
+#define RVIZ2_CRAZYFLIE_PLUGIN__CRAZYFLIE_PANEL_HPP
 
 #include <rviz_common/panel.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -23,15 +23,15 @@
 
 using namespace jirl_interfaces::srv;
 
-namespace rviz2_quad_plugin
+namespace rviz2_crazyflie_plugin
 {
 
-class QuadPanel : public rviz_common::Panel
+class CrazyfliePanel : public rviz_common::Panel
 {
   Q_OBJECT
 
 public:
-  QuadPanel(QWidget* parent = nullptr);
+  CrazyfliePanel(QWidget* parent = nullptr);
 
 private Q_SLOTS:
   void callLand();
@@ -79,6 +79,6 @@ private:
   int last_plane_;
 };
 
-} // namespace rviz2_quad_plugin
+} // namespace rviz2_crazyflie_plugin
 
-#endif  // RVIZ2_QUAD_PLUGIN__QUAD_PANEL_HPP
+#endif  // RVIZ2_CRAZYFLIE_PLUGIN__CRAZYFLIE_PANEL_HPP

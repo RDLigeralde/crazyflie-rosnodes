@@ -1,1 +1,1 @@
-# rviz2_quad_plugin
+# rviz2_crazyflie_plugin

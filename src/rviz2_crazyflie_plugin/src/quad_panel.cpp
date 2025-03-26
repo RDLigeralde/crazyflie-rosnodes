@@ -70,44 +70,34 @@ void QuadPanel::callLand() {
   std::string ns = "/" + drone_name_->text().toStdString();
   auto client = node_->create_client<std_srvs::srv::Trigger>(ns + "/land");
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  bool success;
+  bool success = false;
 
   if (client->wait_for_service(std::chrono::seconds(2))) {
     auto future = client->async_send_request(request);
 
-    if (future.wait_for(std::chrono::seconds(2)) == std::future_status::timeout) {
-      success = false;
-    } else {
+    if (future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout) {
       auto response = future.get();
       success = response->success;
     }
-    handleServiceResponse(success, "Land");
-  } else {
-    status_label_->setText("Status: Land service unavailable");
-    status_label_->setStyleSheet("QLabel { color: red; }");
   }
+  handleServiceResponse(success, "Land");
 }
 
 void QuadPanel::callTakeoff() {
   std::string ns = "/" + drone_name_->text().toStdString();
   auto client = node_->create_client<std_srvs::srv::Trigger>(ns + "/takeoff");
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  bool success;
+  bool success = false;
 
   if (client->wait_for_service(std::chrono::seconds(2))) {
     auto future = client->async_send_request(request);
 
-    if (future.wait_for(std::chrono::seconds(2)) == std::future_status::timeout) {
-      success = false;
-    } else {
+    if (future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout) {
       auto response = future.get();
       success = response->success;
     }
-    handleServiceResponse(success, "Takeoff");
-  } else {
-    status_label_->setText("Status: Takeoff service unavailable");
-    status_label_->setStyleSheet("QLabel { color: red; }");
   }
+  handleServiceResponse(success, "Takeoff");
 }
 
 void QuadPanel::callUpdateSetpoint() {

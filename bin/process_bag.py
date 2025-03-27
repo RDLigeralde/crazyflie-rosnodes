@@ -54,6 +54,8 @@ def analyze_ros2_bag(bag_path, t0=0, tf=float('inf')):
   roll_rate = []
   pitch_rate = []
   yaw_rate = []
+  traj = {"x": [], "x_dot": [], "x_ddot": [], "x_dddot": [], "x_ddddot": [],
+          "yaw": [], "yaw_dot": [], "yaw_ddot": []}
 
   first_timestamp = None
 
@@ -68,11 +70,10 @@ def analyze_ros2_bag(bag_path, t0=0, tf=float('inf')):
     if rel_time < t0 or rel_time > tf:
       continue
 
+    msg_type = type_map[topic]
+    msg_class = get_message(msg_type)
+    message = deserialize_message(data, msg_class)
     if topic == "/crazy_jirl_01/odom":
-      msg_type = type_map[topic]
-      msg_class = get_message(msg_type)
-      message = deserialize_message(data, msg_class)
-
       timestamps.append(rel_time)
       gt_pos["x"].append(message.pose.pose.position.x)
       gt_pos["y"].append(message.pose.pose.position.y)
@@ -88,14 +89,19 @@ def analyze_ros2_bag(bag_path, t0=0, tf=float('inf')):
       gt_ang_vel["y"].append(message.twist.twist.angular.y * 180.0 / np.pi)
       gt_ang_vel["z"].append(message.twist.twist.angular.z * 180.0 / np.pi)
     elif topic == "/ctbr_cmd":
-      msg_type = type_map[topic]
-      msg_class = get_message(msg_type)
-      message = deserialize_message(data, msg_class)
-
       thrust_pwm.append(message.thrust_pwm)
       roll_rate.append(message.roll_rate)
       pitch_rate.append(message.pitch_rate)
       yaw_rate.append(message.yaw_rate)
+    elif topic == "/crazy_jirl_01/trajectory":
+      traj["x"].append(message.x)
+      traj["x_dot"].append(message.x_dot)
+      traj["x_ddot"].append(message.x_ddot)
+      traj["x_dddot"].append(message.x_dddot)
+      traj["x_ddddot"].append(message.x_ddddot)
+      traj["yaw"].append(message.yaw)
+      traj["yaw_dot"].append(message.yaw_dot)
+      traj["yaw_ddot"].append(message.yaw_ddot)
 
   # Convert quaternion to Euler angles
   quaternions = np.column_stack((gt_quat["x"], gt_quat["y"], gt_quat["z"], gt_quat["w"]))
@@ -104,7 +110,7 @@ def analyze_ros2_bag(bag_path, t0=0, tf=float('inf')):
   gt_euler["pitch"] = euler_angles[:, 1].tolist()
   gt_euler["yaw"] = euler_angles[:, 2].tolist()
 
-  # Groun truth data
+  # Ground truth data
   fig, axs = plt.subplots(4, 1, figsize=figsize)
   fig.suptitle("Ground truth data")
 
@@ -141,6 +147,32 @@ def analyze_ros2_bag(bag_path, t0=0, tf=float('inf')):
   axs[3].grid()
 
   fig.tight_layout()
+
+  # Positions errors
+  fig_pos, axs_pos = plt.subplots(3, 1, figsize=figsize)
+  fig_pos.suptitle("Positions comparison")
+  axs_pos[0].plot(timestamps, gt_pos["x"], label="Actual")
+  axs_pos[0].plot(timestamps, traj["x"][0, :], label="Desired")
+  axs_pos[0].set_xlabel("Time [s]")
+  axs_pos[0].set_ylabel("x [m]")
+  axs_pos[0].legend()
+  axs_pos[0].grid()
+
+  axs_pos[1].plot(timestamps, gt_pos["y"], label="Actual")
+  axs_pos[1].plot(timestamps, traj["x"][1, :], label="Desired")
+  axs_pos[1].set_xlabel("Time [s]")
+  axs_pos[1].set_ylabel("y [m]")
+  axs_pos[1].legend()
+  axs_pos[1].grid()
+
+  axs_pos[2].plot(timestamps, gt_pos["z"], label="Actual")
+  axs_pos[2].plot(timestamps, traj["x"][2, :], label="Desired")
+  axs_pos[2].set_xlabel("Time [s]")
+  axs_pos[2].set_ylabel("z [m]")
+  axs_pos[2].legend()
+  axs_pos[2].grid()
+
+  fig_pos.tight_layout()
 
   # Rates errors
   fig_rates, axs_rates = plt.subplots(3, 1, figsize=figsize)

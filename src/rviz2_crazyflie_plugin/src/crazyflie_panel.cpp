@@ -74,8 +74,7 @@ void CrazyfliePanel::callLand() {
 
   if (client->wait_for_service(std::chrono::seconds(2))) {
     auto future = client->async_send_request(request);
-
-    if (future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout) {
+    if (rclcpp::spin_until_future_complete(node_, future) == rclcpp::FutureReturnCode::SUCCESS) {
       auto response = future.get();
       success = response->success;
     }
@@ -91,8 +90,7 @@ void CrazyfliePanel::callTakeoff() {
 
   if (client->wait_for_service(std::chrono::seconds(2))) {
     auto future = client->async_send_request(request);
-
-    if (future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout) {
+    if (rclcpp::spin_until_future_complete(node_, future) == rclcpp::FutureReturnCode::SUCCESS) {
       auto response = future.get();
       success = response->success;
     }
@@ -113,8 +111,7 @@ void CrazyfliePanel::callUpdateSetpoint() {
 
   if (client->wait_for_service(std::chrono::seconds(2))) {
     auto future = client->async_send_request(request);
-
-    if (future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout) {
+    if (rclcpp::spin_until_future_complete(node_, future) == rclcpp::FutureReturnCode::SUCCESS) {
       auto response = future.get();
       success = response->success;
     }
@@ -183,8 +180,7 @@ void CrazyfliePanel::callCircleTrajectory() {
 
   if (client->wait_for_service(std::chrono::seconds(2))) {
     auto future = client->async_send_request(request);
-
-    if (future.wait_for(std::chrono::seconds(2)) != std::future_status::timeout) {
+    if (rclcpp::spin_until_future_complete(node_, future) == rclcpp::FutureReturnCode::SUCCESS) {
       auto response = future.get();
       success = response->success;
     }

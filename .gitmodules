@@ -4,3 +4,6 @@
 [submodule "src/motion_capture_system"]
 	path = src/motion_capture_system
 	url = git@github.com:Jirl-upenn/motion_capture_system.git
+[submodule "src/crazyflie-lib-python"]
+	path = src/crazyflie-lib-python
+	url = git@github.com:Jirl-upenn/crazyflie-lib-python.git

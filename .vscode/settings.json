@@ -190,5 +190,6 @@
     "takingoff",
     "Traj",
     "vbat"
-  ]
+  ],
+  "cmake.sourceDirectory": "/home/neo/workspace/src/jirl_interfaces"
 }

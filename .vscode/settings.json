@@ -89,7 +89,18 @@
     "variant": "cpp",
     "*.idl": "cpp",
     "*.cpp": "cpp",
-    "*.hpp": "cpp"
+    "*.hpp": "cpp",
+    "charconv": "cpp",
+    "compare": "cpp",
+    "concepts": "cpp",
+    "coroutine": "cpp",
+    "source_location": "cpp",
+    "format": "cpp",
+    "numbers": "cpp",
+    "semaphore": "cpp",
+    "span": "cpp",
+    "stdfloat": "cpp",
+    "stop_token": "cpp"
   },
   // Use Pylance as language server
   "python.languageServer": "Pylance",
@@ -156,6 +167,7 @@
   },
   "ros.distro": "jazzy",
   "cSpell.words": [
+    "blit",
     "cbuild",
     "cflib",
     "clbk",
@@ -170,10 +182,12 @@
     "ddot",
     "dpos",
     "Eigen",
+    "figsize",
     "hstack",
     "jirl",
     "kalman",
     "linalg",
+    "mcap",
     "mocap",
     "multirotor",
     "Odometry",
@@ -184,12 +198,20 @@
     "RCLCPP",
     "rclpy",
     "remappings",
+    "rosbag",
+    "rosidl",
     "rotorpy",
     "setpoint",
     "srvs",
     "takingoff",
     "Traj",
-    "vbat"
+    "vbat",
+    "xlabel",
+    "xlim",
+    "ylabel",
+    "ylim",
+    "zlabel",
+    "zlim"
   ],
   "cmake.sourceDirectory": "/home/neo/workspace/src/jirl_interfaces"
 }

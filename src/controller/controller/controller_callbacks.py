@@ -1,12 +1,9 @@
 import numpy as np
 import time
+from scipy.spatial.transform import Rotation as R
 
 from nav_msgs.msg import Odometry
-
-from .controller_utils import odom_to_body
-
-from jirl_interfaces.msg import CommandCTBR
-from jirl_interfaces.srv import Trajectory
+from jirl_interfaces.srv import StartTrajectory
 
 from rotorpy.trajectories.hover_traj import HoverTraj
 from rotorpy.trajectories.circular_traj import CircularTraj
@@ -38,19 +35,20 @@ def trajectory_clbk(self, request, response):
 
     state = self.mocap_pose
     self.t0 = time.time()
+    self.dt = 0.0
 
-    if request.trajectory_type == Trajectory.Request.CIRCLE:
+    if request.trajectory_type == StartTrajectory.Request.CIRCLE:
         radius = request.radius
         center = np.array([state['x'][0] - radius, state['x'][1], state['x'][2]])
         freq = request.freq
         yaw_bool = request.direction
-        if request.plane == Trajectory.Request.PLANE_XY:
+        if request.plane == StartTrajectory.Request.PLANE_XY:
             plane = 'XY'
-        elif request.plane == Trajectory.Request.PLANE_YZ:
+        elif request.plane == StartTrajectory.Request.PLANE_YZ:
             plane = 'YZ'
-        elif request.plane == Trajectory.Request.PLANE_XZ:
+        elif request.plane == StartTrajectory.Request.PLANE_XZ:
             plane = 'XZ'
-        direction = 'CW' if request.direction == Trajectory.Request.DIR_CW else 'CCW'
+        direction = 'CW' if request.direction == StartTrajectory.Request.DIR_CW else 'CCW'
         self.traj_duration = request.duration
 
         self.trajectory = CircularTraj(center=center, radius=radius, freq=freq, yaw_bool=yaw_bool, plane=plane, direction=direction)
@@ -74,7 +72,7 @@ def takeoff_clbk(self, _, response):
         return response
 
     self.t0 = time.time()
-    self.dt = 0.0
+    self.p0 = self.mocap_pose['x']
 
     # Unlock startup thrust protection
     self.send_ctbr_command(0, 0.0, 0.0, 0.0)
@@ -93,6 +91,7 @@ def landing_clbk(self, _, response):
         return response
 
     self.t0 = time.time()
+    self.p0 = self.mocap_pose['x']
 
     self.get_logger().info("[FSM] Landing")
     self.fsm.land()
@@ -113,28 +112,28 @@ def mocap_clbk(self, msg: Odometry):
     """
     Mocap odometry callback
     """
-    p, v_b, w_b, R_wb, quat_wb = odom_to_body(msg)
-
-    # print("Position: ", p)
-    # print("Velocity: ", v_b)
-    # print("Angular velocity: ", w_b)
-    # print("Rotation matrix: ", R_wb)
-    # print("Quaternion: ", quat_wb)
+    p = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z])
+    v_w = np.array([msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z])
+    w_w = np.array([msg.twist.twist.angular.x, msg.twist.twist.angular.y, msg.twist.twist.angular.z])
+    quat = [msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w]
+    R_mat = R.from_quat(quat).as_matrix()
+    v_b = R_mat.T @ v_w
+    w_b = R_mat.T @ w_w
 
     self.mocap_pose['x'] = p
-    self.mocap_pose['v'] = v_b
-    self.mocap_pose['w'] = w_b
-    self.mocap_pose['R'] = R_wb
-    self.mocap_pose['q'] = quat_wb
+    self.mocap_pose['R'] = R_mat
+    self.mocap_pose['q'] = quat
+    if self.policy_enabled:
+        self.mocap_pose['v'] = v_b
+        self.mocap_pose['w'] = w_b
+    else:
+        self.mocap_pose['v'] = v_w
+        self.mocap_pose['w'] = w_w
 
     if self.fsm.state == 'landed':
         return
     elif self.fsm.state == 'taking_off':
-        # # Arm the Crazyflie
-        # self.scf.cf.platform.send_arming_request(True)
-        # time.sleep(1.0)
-
-        x0 = [p[0], p[1], self.takeoff_height]
+        x0 = [self.p0[0], self.p0[1], self.takeoff_height]
         self.flat_output = HoverTraj(x0=x0).update(0)
 
         if (time.time() - self.t0 > 3.0):
@@ -144,7 +143,10 @@ def mocap_clbk(self, msg: Odometry):
     elif self.fsm.state == 'hovering':
         pass
     elif self.fsm.state == 'landing':
-        x0 = [p[0], p[1], 0.10]
+        if (time.time() - self.t0 < 1.0):
+            x0 = [self.p0[0], self.p0[1], 0.15]
+        else:
+            x0 = [self.p0[0], self.p0[1], 0.05]
         self.flat_output = HoverTraj(x0=x0).update(0)
 
         if (time.time() - self.t0 > 3.0):
@@ -164,6 +166,9 @@ def mocap_clbk(self, msg: Odometry):
         self.dt = time.time() - self.t0
         self.flat_output = self.trajectory.update(self.dt)
 
+    # Publish trajectory
+    self.send_trajectory(self.flat_output)
+
     # Apply control
     control = self.controller.update(0, self.mocap_pose, self.flat_output)
 
@@ -180,9 +185,9 @@ def mocap_clbk(self, msg: Odometry):
         thrust_des_grams = 0
     thrust_pwm = c1 + c2 * (c3 + thrust_des_grams)**.5
     thrust_pwm = thrust_pwm * thrust_pwm_max + thrust_pwm_min * 1.0
-    thrust_pwm = int(min(max(thrust_pwm_min, thrust_pwm), thrust_pwm_max * 0.9))
+    thrust_pwm = int(min(max(thrust_pwm_min, thrust_pwm), thrust_pwm_max * 0.95))
 
     w_des = control['cmd_w']        # deg/s
 
-    # Send msg
-    self.send_ctbr_command(thrust_pwm, w_des[0], w_des[1], w_des[2])
+    # Publish command msg
+    self.send_ctbr_command(thrust_pwm, thrust_des_newtons, w_des[0], w_des[1], w_des[2])

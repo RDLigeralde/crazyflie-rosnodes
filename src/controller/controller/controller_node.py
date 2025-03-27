@@ -5,8 +5,8 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Trigger
-from jirl_interfaces.msg import CommandCTBR
-from jirl_interfaces.srv import UpdateSetpoint, Trajectory
+from jirl_interfaces.msg import CommandCTBR, Trajectory
+from jirl_interfaces.srv import UpdateSetpoint, StartTrajectory
 
 from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
 from rotorpy.controllers.policy_controller import PolicyControl
@@ -15,7 +15,7 @@ from rotorpy.vehicles.crazyflie_params import quad_params as crazyflie_params
 
 import torch
 
-from .controller_qos import qos_best_effort, qos_reliable
+from .controller_qos import *
 from .controller_fsm import ControllerFSM
 
 class ControllerNode(Node):
@@ -85,6 +85,13 @@ class ControllerNode(Node):
             qos_best_effort
         )
 
+        # Trajectory data
+        self.traj_pub = self.create_publisher(
+            Trajectory,
+            'trajectory',
+            qos_best_effort
+        )
+
     def init_subscriptions(self):
         """
         Init subscriptions
@@ -108,9 +115,9 @@ class ControllerNode(Node):
             'update_setpoint',
             self.update_setpoint_clbk)
 
-        # Trajectory
+        # StartTrajectory
         self.trajectory_srv = self.create_service(
-            Trajectory,
+            StartTrajectory,
             'trajectory',
             self.trajectory_clbk)
 

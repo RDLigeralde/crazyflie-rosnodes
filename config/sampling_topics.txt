@@ -1,4 +1,5 @@
 /crazy_jirl_01/odom
 /crazy_jirl_01/pose
+/crazy_jirl_01/trajectory
 /ctbr_cmd
 /tf

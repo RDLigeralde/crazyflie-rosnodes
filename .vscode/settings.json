@@ -110,7 +110,8 @@
     "/opt/ros/jazzy/local/lib/python3.12/dist-packages/",
     "/opt/ros/dua-utils/install/lib/python3.12/site-packages/",
     "/opt/ros/dua-utils/install/local/lib/python3.12/dist-packages/",
-    "./src/rotorpy"
+    "./src/rotorpy",
+    "./src/crazyflie-lib-python"
   ],
   // Autocomplete from ros python packages
   "python.autoComplete.extraPaths": [
@@ -167,12 +168,15 @@
   },
   "ros.distro": "jazzy",
   "cSpell.words": [
+    "appchannel",
+    "Bitcraze",
     "blit",
     "cbuild",
     "cflib",
     "clbk",
     "coeff",
     "colcon",
+    "Constainer",
     "crazyflie",
     "crazyradio",
     "crtp",
@@ -182,8 +186,11 @@
     "ddot",
     "dpos",
     "Eigen",
+    "errmsg",
+    "extpos",
     "figsize",
     "hstack",
+    "informations",
     "jirl",
     "kalman",
     "linalg",
@@ -191,6 +198,7 @@
     "mocap",
     "multirotor",
     "Odometry",
+    "platformservice",
     "quadcopter",
     "quadrotor",
     "qualisys",
@@ -204,6 +212,7 @@
     "setpoint",
     "srvs",
     "takingoff",
+    "toccache",
     "Traj",
     "vbat",
     "xlabel",

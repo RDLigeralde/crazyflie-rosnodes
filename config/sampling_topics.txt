@@ -1,1 +1,4 @@
-/test
+/crazy_jirl_01/odom
+/crazy_jirl_01/pose
+/ctbr_cmd
+/tf

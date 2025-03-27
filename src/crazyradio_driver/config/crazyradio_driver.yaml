@@ -9,3 +9,4 @@
       radio://0/81/2M/E7E7E70102,
     ]
     logger_period_ms: 1000
+    reconnection_period_ms: 2000

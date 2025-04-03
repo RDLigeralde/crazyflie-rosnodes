@@ -5,7 +5,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <jirl_interfaces/srv/update_setpoint.hpp>
-#include <jirl_interfaces/srv/trajectory.hpp>
+#include <jirl_interfaces/srv/start_trajectory.hpp>
 
 #include <QPushButton>
 #include <QLineEdit>

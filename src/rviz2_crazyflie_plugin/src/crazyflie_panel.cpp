@@ -166,16 +166,16 @@ void CrazyfliePanel::openCircleConfig() {
 
 void CrazyfliePanel::callCircleTrajectory() {
   std::string ns = "/" + drone_name_->text().toStdString();
-  auto client = node_->create_client<Trajectory>(ns + "/trajectory");
-  auto request = std::make_shared<Trajectory::Request>();
+  auto client = node_->create_client<StartTrajectory>(ns + "/trajectory");
+  auto request = std::make_shared<StartTrajectory::Request>();
   bool success = false;
 
-  request->trajectory_type = Trajectory::Request::CIRCLE;
+  request->trajectory_type = StartTrajectory::Request::CIRCLE;
   request->radius = radius_input_->text().toDouble();
   request->freq = frequency_input_->text().toDouble();
   request->duration = duration_input_->text().toDouble();
-  request->direction = direction_checkbox_->isChecked() ? Trajectory::Request::DIR_CCW
-                                                        : Trajectory::Request::DIR_CW;
+  request->direction = direction_checkbox_->isChecked() ? StartTrajectory::Request::DIR_CCW
+                                                        : StartTrajectory::Request::DIR_CW;
   request->plane = static_cast<int8_t>(plane_selector_->currentIndex());
 
   if (client->wait_for_service(std::chrono::seconds(2))) {

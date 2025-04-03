@@ -28,6 +28,8 @@ CrazyfliePanel::CrazyfliePanel(QWidget* parent)
   y_input_ = new QLineEdit();
   z_input_ = new QLineEdit();
   yaw_input_ = new QLineEdit();
+  global_checkbox_ = new QCheckBox("Global");
+  global_checkbox_->setChecked(false);
 
   QHBoxLayout *setpoint_layout = new QHBoxLayout();
   setpoint_layout->addWidget(new QLabel("X:"));
@@ -38,6 +40,7 @@ CrazyfliePanel::CrazyfliePanel(QWidget* parent)
   setpoint_layout->addWidget(z_input_);
   setpoint_layout->addWidget(new QLabel("Yaw:"));
   setpoint_layout->addWidget(yaw_input_);
+  setpoint_layout->addWidget(global_checkbox_);
 
   // Trajectory selector
   trajectory_selector_ = new QComboBox();
@@ -108,6 +111,7 @@ void CrazyfliePanel::callUpdateSetpoint() {
   request->y = y_input_->text().toDouble();
   request->z = z_input_->text().toDouble();
   request->yaw = yaw_input_->text().toDouble();
+  request->is_global = global_checkbox_->isChecked();
 
   if (client->wait_for_service(std::chrono::seconds(2))) {
     auto future = client->async_send_request(request);

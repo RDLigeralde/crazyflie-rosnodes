@@ -58,6 +58,7 @@ private:
   QLineEdit *y_input_;
   QLineEdit *z_input_;
   QLineEdit *yaw_input_;
+  QCheckBox *global_checkbox_;
 
   QComboBox *trajectory_selector_;
 

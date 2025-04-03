@@ -22,7 +22,13 @@ def update_setpoint_clbk(self, request, response):
         return response
 
     with self.traj_lock:
-        self.flat_output = HoverTraj(x0=x0, yaw0=request.yaw).update(0)
+        if request.is_global:
+            new_pos = x0
+            new_yaw = request.yaw
+        else:
+            new_pos = self.flat_output['x'] + x0
+            new_yaw = self.mocap_pose['yaw'] + request.yaw
+        self.flat_output = HoverTraj(x0=new_pos, yaw0=new_yaw).update(0)
 
     response.success = True
     return response
@@ -123,6 +129,7 @@ def mocap_clbk(self, msg: Odometry):
     self.mocap_pose['x'] = p
     self.mocap_pose['R'] = R_mat
     self.mocap_pose['q'] = quat
+    self.mocap_pose['yaw'] = R.from_matrix(R_mat).as_euler('zyx')[0]
     if self.policy_enabled:
         self.mocap_pose['v'] = v_b
         self.mocap_pose['w'] = w_b

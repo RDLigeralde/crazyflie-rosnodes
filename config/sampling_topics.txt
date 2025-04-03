@@ -1,5 +1,14 @@
 /crazy_jirl_01/odom
 /crazy_jirl_01/pose
 /crazy_jirl_01/trajectory
+/crazy_jirl_02/odom
+/crazy_jirl_02/pose
+/crazy_jirl_02/trajectory
+/crazy_jirl_03/odom
+/crazy_jirl_03/pose
+/crazy_jirl_03/trajectory
+/crazy_jirl_04/odom
+/crazy_jirl_04/pose
+/crazy_jirl_04/trajectory
 /ctbr_cmd
 /tf

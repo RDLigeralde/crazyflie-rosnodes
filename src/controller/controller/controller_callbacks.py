@@ -75,7 +75,7 @@ def takeoff_clbk(self, _, response):
     self.p0 = self.mocap_pose['x']
 
     # Unlock startup thrust protection
-    self.send_ctbr_command(0, 0.0, 0.0, 0.0)
+    self.send_ctbr_command(0, 0.0, 0.0, 0.0, 0.0)
 
     # Change FSM state
     self.fsm.takeoff()
@@ -151,7 +151,7 @@ def mocap_clbk(self, msg: Odometry):
 
         if (time.time() - self.t0 > 3.0):
             for _ in range(30):
-                self.send_ctbr_command(0, 0.0, 0.0, 0.0)
+                self.send_ctbr_command(0, 0.0, 0.0, 0.0, 0.0)
                 time.sleep(0.1)
 
             self.get_logger().info("[FSM] Landed")
@@ -161,10 +161,11 @@ def mocap_clbk(self, msg: Odometry):
     elif self.fsm.state == 'flying':
         if self.dt > self.traj_duration:
             self.get_logger().info(f"Finished circular trajectory")
+            self.flat_output = HoverTraj(x0=p).update(0)
             self.fsm.stop()
-
-        self.dt = time.time() - self.t0
-        self.flat_output = self.trajectory.update(self.dt)
+        else:
+            self.dt = time.time() - self.t0
+            self.flat_output = self.trajectory.update(self.dt)
 
     # Publish trajectory
     self.send_trajectory(self.flat_output)

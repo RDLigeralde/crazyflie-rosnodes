@@ -23,7 +23,7 @@ class ControllerNode(Node):
     # Import methods
     from .controller_params import init_parameters
     from .controller_callbacks import mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk
-    from .controller_utils import send_ctbr_command
+    from .controller_utils import send_ctbr_command, send_trajectory
 
     mocap_lock = Lock()
     traj_lock = Lock()

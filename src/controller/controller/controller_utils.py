@@ -22,13 +22,13 @@ def send_trajectory(self, traj):
     Send trajectory
     """
     traj_msg = Trajectory()
-    traj_msg.x = traj['x']
-    traj_msg.x_dot = traj['x_dot']
-    traj_msg.x_ddot = traj['x_ddot']
-    traj_msg.x_dddot = traj['x_dddot']
-    traj_msg.x_ddddot = traj['x_ddddot']
-    traj_msg.yaw = traj['yaw']
-    traj_msg.yaw_dot = traj['yaw_dot']
-    traj_msg.yaw_ddot = traj['yaw_ddot']
+    traj_msg.x = np.array(traj['x'], dtype=np.float64)
+    traj_msg.x_dot = np.array(traj['x_dot'], dtype=np.float64)
+    traj_msg.x_ddot = np.array(traj['x_ddot'], dtype=np.float64)
+    traj_msg.x_dddot = np.array(traj['x_dddot'], dtype=np.float64)
+    traj_msg.x_ddddot = np.array(traj['x_ddddot'], dtype=np.float64)
+    traj_msg.yaw = float(traj['yaw'])
+    traj_msg.yaw_dot = float(traj['yaw_dot'])
+    traj_msg.yaw_ddot = float(traj['yaw_ddot'])
 
-    self.traj_pub.publish(traj)
+    self.traj_pub.publish(traj_msg)

@@ -281,13 +281,34 @@ function ros2bag {
   fi
 }
 
-alias land='ros2 service call /crazy_jirl_01/land std_srvs/srv/Trigger'
-alias takeoff='ros2 service call /crazy_jirl_01/takeoff std_srvs/srv/Trigger'
-alias circle='ros2 service call /crazy_jirl_01/trajectory std_srvs/srv/Trigger'
 update_setpoint() {
-    if [ "$#" -ne 4 ]; then
-        echo "Usage: update_setpoint x y z yaw"
-        return 1
-    fi
-    ros2 service call /crazy_jirl_01/update_setpoint jirl_interfaces/srv/UpdateSetpoint "{x: $1, y: $2, z: $3, yaw: $4}"
+  if [ "$#" -ne 5 ]; then
+    echo "Usage: update_setpoint drone_name x y z yaw"
+    return 1
+  fi
+  ros2 service call /$1/update_setpoint jirl_interfaces/srv/UpdateSetpoint "{x: $2, y: $3, z: $4, yaw: $5}"
+}
+
+land() {
+  if [ "$#" -ne 1 ]; then
+    echo "Usage: land drone_name"
+    return 1
+  fi
+  ros2 service call /$1/land std_srvs/srv/Trigger
+}
+
+takeoff() {
+  if [ "$#" -ne 1 ]; then
+    echo "Usage: takeoff drone_name"
+    return 1
+  fi
+  ros2 service call /$1/takeoff std_srvs/srv/Trigger
+}
+
+circle() {
+  if [ "$#" -ne 4 ]; then
+    echo "Usage: circle drone_name radius freq duration"
+    return 1
+  fi
+  ros2 service call /$1/trajectory jirl_interfaces/srv/StartTrajectory "{trajectory_type: 0, radius: $2, freq: $3, duration: $4}"
 }

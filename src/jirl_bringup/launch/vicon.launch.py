@@ -23,7 +23,6 @@ def generate_launch_description():
     node = Node(
         package='mocap_vicon',
         executable='mocap_vicon_node',
-        output='screen',
         shell=False,
         emulate_tty=True,
         output='both',

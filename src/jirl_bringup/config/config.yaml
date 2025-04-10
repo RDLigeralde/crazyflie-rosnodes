@@ -16,24 +16,24 @@
 /crazyradio_driver:
   ros__parameters:
     crazyflie_names: [
-      # crazy_jirl_01,
+      crazy_jirl_01,
       crazy_jirl_02,
-      # crazy_jirl_03,
-      # crazy_jirl_05,
-      # crazy_jirl_01_demo
+      crazy_jirl_03_red
+      crazy_jirl_05_red,
+      crazy_jirl_06_red,
     ]
     crazyradio_uris: [
-      # radio://0/80/2M/E7E7E70101,
-      radio://0/81/2M/E7E7E70102,
-      # radio://0/115/2M/E7E7E7E703,
-      # radio://0/50/2M/E7E7E7E705,
-      # radio://0/110/2M/E7E7E7E701,
+      radio://0/80/2M/E7E7E70101,
+      radio://0/90/2M/E7E7E70102,
+      radio://0/93/2M/E7E7E70103,
+      radio://0/95/2M/E7E7E70105,
+      radio://0/96/2M/E7E7E70106,
     ]
     logger_period_ms: 1000
     reconnection_period_ms: 2000
 
 # Vicon
-/mocap_vicon_node:
+/vicon_node:
   ros__parameters:
     server_address: mocap.perch
     frame_rate: 120
@@ -46,6 +46,6 @@
     model_list:
       - crazy_jirl_01
       - crazy_jirl_02
-      - crazy_jirl_03
-      - crazy_jirl_05
-      - crazy_jirl_01_demo
+      - crazy_jirl_03_red
+      - crazy_jirl_05_red
+      - crazy_jirl_06_red

@@ -12,6 +12,7 @@ class ControllerFSM():
         ]
         transitions = [
             {'trigger': 'takeoff',          'source': 'landed',     'dest': 'taking_off'},
+            {'trigger': 'launch',           'source': 'landed',     'dest': 'hovering'},
             {'trigger': 'in_position',      'source': 'taking_off', 'dest': 'hovering'},
             {'trigger': 'land',             'source': 'hovering',   'dest': 'landing'},
             {'trigger': 'landing_complete', 'source': 'landing',    'dest': 'landed'},

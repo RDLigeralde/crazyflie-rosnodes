@@ -2,6 +2,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from nav_msgs.msg import Odometry
 from jirl_interfaces.msg import CommandCTBR, Trajectory
+from geometry_msgs.msg import Twist
 
 def send_ctbr_command(self, thrust_pwm, thrust_N, roll_rate, pitch_rate, yaw_rate):
     """
@@ -16,6 +17,18 @@ def send_ctbr_command(self, thrust_pwm, thrust_N, roll_rate, pitch_rate, yaw_rat
     command_msg.yaw_rate = float(yaw_rate)
 
     self.cmd_pub.publish(command_msg)
+
+def send_twist_command(self, thrust_pwm, thrust_N, roll_rate, pitch_rate, yaw_rate):
+    """
+    Send Twist command
+    """
+    twist_msg = Twist()
+    twist_msg.linear.z = float(thrust_pwm)
+    twist_msg.linear.y = float(roll_rate)
+    twist_msg.linear.x = -float(pitch_rate)
+    twist_msg.angular.z = -float(yaw_rate)
+
+    self.twist_pub.publish(twist_msg)
 
 def send_trajectory(self, traj):
     """

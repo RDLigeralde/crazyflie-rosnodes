@@ -4,6 +4,7 @@ from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Twist
 from std_srvs.srv import Trigger
 from jirl_interfaces.msg import CommandCTBR, Trajectory
 from jirl_interfaces.srv import UpdateSetpoint, StartTrajectory
@@ -23,7 +24,7 @@ class ControllerNode(Node):
     # Import methods
     from .controller_params import init_parameters
     from .controller_callbacks import mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk
-    from .controller_utils import send_ctbr_command, send_trajectory
+    from .controller_utils import send_ctbr_command, send_trajectory, send_twist_command
 
     mocap_lock = Lock()
     traj_lock = Lock()
@@ -81,7 +82,13 @@ class ControllerNode(Node):
         # CTBR command
         self.cmd_pub = self.create_publisher(
             CommandCTBR,
-            '/ctbr_cmd',
+            'ctbr_cmd',
+            qos_best_effort
+        )
+        # Twist command
+        self.twist_pub = self.create_publisher(
+            Twist,
+            'cmd_vel_legacy',
             qos_best_effort
         )
 

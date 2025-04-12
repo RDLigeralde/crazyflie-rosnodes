@@ -14,8 +14,15 @@ def update_setpoint_clbk(self, request, response):
     if self.fsm.state == 'hovering':
         self.get_logger().info(f"Received new setpoint: {x0}")
     elif self.fsm.state == 'flying':
-        self.fsm.hovering()
+        self.fsm.hovering()                         # FIXME
         self.get_logger().info(f"[FSM] Hovering at new setpoint: {x0}")
+    elif self.fsm.state == 'landed':
+        if not request.is_global:
+            self.get_logger().error("Setpoint must be global for manual launch")
+            response.success = False
+            return response
+        self.fsm.launch()
+        self.get_logger().info(f"[FSM] Waiting for launch...")
     else:
         self.get_logger().info("Cannot update setpoint from current state")
         response.success = False
@@ -81,11 +88,11 @@ def takeoff_clbk(self, _, response):
     self.p0 = self.mocap_pose['x']
 
     # Unlock startup thrust protection
-    self.send_ctbr_command(0, 0.0, 0.0, 0.0, 0.0)
+    self.send_twist_command(0, 0.0, 0.0, 0.0, 0.0)
 
     # Change FSM state
     self.fsm.takeoff()
-    self.get_logger().info("[FSM] Taking off")
+    self.get_logger().info("[FSM] Taking off to %.2f, %.2f, %.2f" % (self.p0[0], self.p0[1], self.takeoff_height))
 
     response.success = True
     return response
@@ -158,7 +165,7 @@ def mocap_clbk(self, msg: Odometry):
 
         if (time.time() - self.t0 > 3.0):
             for _ in range(30):
-                self.send_ctbr_command(0, 0.0, 0.0, 0.0, 0.0)
+                self.send_twist_command(0, 0.0, 0.0, 0.0, 0.0)
                 time.sleep(0.1)
 
             self.get_logger().info("[FSM] Landed")
@@ -199,3 +206,45 @@ def mocap_clbk(self, msg: Odometry):
 
     # Publish command msg
     self.send_ctbr_command(thrust_pwm, thrust_des_newtons, w_des[0], w_des[1], w_des[2])
+
+
+
+
+
+    # # Desired TRPY
+    # self.kyaw = 10
+    # thrust_des_newtons = control['cmd_thrust']
+    # thrust_des_grams = thrust_des_newtons/9.81*1000  # Have to convert thrust to grams
+    # q_des = control['cmd_q']
+    # R_des = R.from_quat(q_des).as_matrix()
+    # eul_des = R.from_quat(q_des).as_euler('ZXY', degrees=True)
+    # yaw_des = eul_des[0]
+
+    # # Current RPY
+    # R_cur = R.from_quat(quat)
+    # eul_cur = R_cur.as_euler('ZXY', degrees=True)
+    # yaw_cur = eul_cur[0]
+
+    # # Map the desired onto the current body frame based on yaw
+    # R_z = R.from_rotvec((yaw_cur - yaw_des)*(np.pi/180)*np.array([0,0,1])).as_matrix()
+    # R_des_new = R_des@R_z
+
+    # pitch_des = -np.arcsin(R_des_new[2,0])*180/np.pi
+    # roll_des = np.arctan2(R_des_new[2,1], R_des_new[2,2])*180/np.pi
+
+    # if c3 + thrust_des_grams < 0:
+    #     thrust_des_grams = 0
+    # thrust_pwm = c1 + c2 * (c3 + thrust_des_grams)**.5
+    # thrust_pwm = min(thrust_pwm, 0.9)
+
+    # # Scale to full range
+    # thrust_pwm_max = 60000
+
+    # e_yaw = (yaw_des - yaw_cur)
+    # if e_yaw > 180:
+    #     e_yaw -= 360
+    # elif e_yaw < -180:
+    #     e_yaw += 360
+
+    # # Publish command msg
+    # self.send_twist_command(thrust_pwm, thrust_des_newtons, roll_des, pitch_des, (-self.kyaw * e_yaw))

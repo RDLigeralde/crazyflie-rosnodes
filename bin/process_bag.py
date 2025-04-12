@@ -181,7 +181,7 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
     print(f"- {topic}: {msg_type}")
 
   # Check if required topics exist
-  required_topics = [f"/{namespace}/odom", "/ctbr_cmd", f"/{namespace}/trajectory"]
+  required_topics = [f"/{namespace}/odom", f"/{namespace}/ctbr_cmd", f"/{namespace}/trajectory"]
   missing_topics = []
   # Check topics with and without leading slash for robustness
   for req_topic in required_topics:
@@ -256,7 +256,7 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
 
         # --- Topic processing ---
         odom_topic = f"{namespace}/odom".lstrip('/')
-        cmd_topic = "ctbr_cmd".lstrip('/')
+        cmd_topic = f"/{namespace}/ctbr_cmd".lstrip('/')
         traj_topic = f"{namespace}/trajectory".lstrip('/')
 
         if normalized_topic == odom_topic:

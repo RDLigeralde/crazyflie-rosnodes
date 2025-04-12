@@ -100,7 +100,19 @@
     "semaphore": "cpp",
     "span": "cpp",
     "stdfloat": "cpp",
-    "stop_token": "cpp"
+    "stop_token": "cpp",
+    "csetjmp": "cpp",
+    "barrier": "cpp",
+    "cuchar": "cpp",
+    "expected": "cpp",
+    "netfwd": "cpp",
+    "rope": "cpp",
+    "slist": "cpp",
+    "latch": "cpp",
+    "ranges": "cpp",
+    "spanstream": "cpp",
+    "stacktrace": "cpp",
+    "syncstream": "cpp"
   },
   // Use Pylance as language server
   "python.languageServer": "Pylance",

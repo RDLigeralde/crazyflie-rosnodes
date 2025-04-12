@@ -282,12 +282,23 @@ function ros2bag {
 }
 
 update_setpoint() {
-  if [ "$#" -ne 5 ]; then
-    echo "Usage: update_setpoint drone_name x y z yaw"
+  if [ "$#" -ne 6 ]; then
+    echo "Usage: update_setpoint drone_name [rel|glob] x y z yaw"
     return 1
   fi
-  ros2 service call /$1/update_setpoint jirl_interfaces/srv/UpdateSetpoint "{x: $2, y: $3, z: $4, yaw: $5}"
+
+  if [ "$2" = "rel" ]; then
+    is_global=false
+  elif [ "$2" = "glob" ]; then
+    is_global=true
+  else
+    echo "Error: second argument must be 'rel' or 'glob'"
+    return 1
+  fi
+
+  ros2 service call /$1/update_setpoint jirl_interfaces/srv/UpdateSetpoint "{x: $3, y: $4, z: $5, yaw: $6, is_global: $is_global}"
 }
+
 
 land() {
   if [ "$#" -ne 1 ]; then

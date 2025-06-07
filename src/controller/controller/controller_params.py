@@ -8,7 +8,8 @@ def init_parameters(self):
     # Declare parameters
     self.declare_parameters(
         namespace='',
-        parameters=[('gate_side', 0.0),
+        parameters=[('crazyradio_driver', ''),
+                    ('gate_side', 0.0),
                     ('low_level_controller.c1', 0.0),
                     ('low_level_controller.c2', 0.0),
                     ('low_level_controller.c3', 0.0),
@@ -20,6 +21,7 @@ def init_parameters(self):
                    ])
 
     # Get parameters
+    self.crazyradio_driver = self.get_parameter('crazyradio_driver').value
     self.gate_side = self.get_parameter('gate_side').value
     self.low_level_controller_c1 = self.get_parameter('low_level_controller.c1').value
     self.low_level_controller_c2 = self.get_parameter('low_level_controller.c2').value
@@ -32,6 +34,7 @@ def init_parameters(self):
     self.waypoints = waypoints_flat.view(-1, 6)
 
     # Print parameters
+    self.get_logger().info(f'crazyradio_driver: {self.crazyradio_driver}')
     self.get_logger().info(f'c1: {self.low_level_controller_c1}')
     self.get_logger().info(f'c2: {self.low_level_controller_c2}')
     self.get_logger().info(f'c3: {self.low_level_controller_c3}')

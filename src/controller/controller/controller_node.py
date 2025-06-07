@@ -77,9 +77,13 @@ class ControllerNode(Node):
         Init publishers
         """
         # CTBR command
+        if self.crazyradio_driver == 'cpp':
+            topic_name = 'ctbr_cmd'
+        elif self.crazyradio_driver in ['cpp', 'py', 'python']:
+            topic_name = '/ctbr_cmd'
         self.cmd_pub = self.create_publisher(
             CommandCTBR,
-            'ctbr_cmd',
+            topic_name,
             qos_best_effort
         )
 

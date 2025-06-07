@@ -1,6 +1,7 @@
 # Controller
 /*/controller:
   ros__parameters:
+    crazyradio_driver: py   # cpp or python
     gate_side: 1.0
     low_level_controller:
       c1: -0.6709
@@ -25,7 +26,7 @@
       crazy_jirl_02,
     ]
     crazyradio_uris: [
-      radio://0/90/2M/E7E7E70102,
+      radio://0/83/2M/E7E7E70102,
     ]
     logger_period_ms: 1000
     reconnection_period_ms: 2000

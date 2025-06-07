@@ -316,6 +316,14 @@ takeoff() {
   ros2 service call /$1/takeoff std_srvs/srv/Trigger
 }
 
+race() {
+  if [ "$#" -ne 1 ]; then
+    echo "Usage: race drone_name"
+    return 1
+  fi
+  ros2 service call /$1/race std_srvs/srv/Trigger
+}
+
 circle() {
   if [ "$#" -ne 4 ]; then
     echo "Usage: circle drone_name radius freq duration"

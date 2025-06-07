@@ -1,14 +1,6 @@
 /crazyradio_driver:
   ros__parameters:
     crazyflie_names:
-      - crazy_jirl_01
       - crazy_jirl_02
-      - crazy_jirl_03_red
-      - crazy_jirl_05_red
-      - crazy_jirl_06_red
     crazyflie_uris:
-      - radio://0/93/2M/E7E7E70101
-      - radio://0/93/2M/E7E7E70102
-      - radio://0/93/2M/E7E7E70103
-      - radio://0/93/2M/E7E7E70105
-      - radio://0/93/2M/E7E7E70106
+      - radio://0/83/2M/E7E7E70102

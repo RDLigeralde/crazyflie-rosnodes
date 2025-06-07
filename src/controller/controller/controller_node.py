@@ -4,13 +4,11 @@ from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist
 from std_srvs.srv import Trigger
 from jirl_interfaces.msg import CommandCTBR, Trajectory
 from jirl_interfaces.srv import UpdateSetpoint, StartTrajectory
 
 from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
-from rotorpy.controllers.policy_controller import PolicyControl
 
 from rotorpy.vehicles.crazyflie_params import quad_params as crazyflie_params
 
@@ -18,13 +16,14 @@ import torch
 
 from .controller_qos import *
 from .controller_fsm import ControllerFSM
+from .controller_policy import RacingPolicy
 
 class ControllerNode(Node):
 
     # Import methods
     from .controller_params import init_parameters
-    from .controller_callbacks import mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk
-    from .controller_utils import send_ctbr_command, send_trajectory, send_twist_command
+    from .controller_callbacks import mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk, race_clbk
+    from .controller_utils import send_ctbr_command, send_trajectory
 
     mocap_lock = Lock()
     traj_lock = Lock()
@@ -60,10 +59,8 @@ class ControllerNode(Node):
         """
         Init controller
         """
-        if self.policy_enabled:
-            self.controller = PolicyControl(crazyflie_params, self.policy_path, device=self.device)
-        else:
-            self.controller = SE3ControlCTBR(crazyflie_params)
+        self.policy = RacingPolicy(crazyflie_params, self.policy_path, self.waypoints, self.waypoints_quat, self.gate_side, device=self.device)
+        self.se3_controller = SE3ControlCTBR(crazyflie_params)
 
     def init_callback_groups(self):
         """
@@ -83,12 +80,6 @@ class ControllerNode(Node):
         self.cmd_pub = self.create_publisher(
             CommandCTBR,
             'ctbr_cmd',
-            qos_best_effort
-        )
-        # Twist command
-        self.twist_pub = self.create_publisher(
-            Twist,
-            'cmd_vel_legacy',
             qos_best_effort
         )
 
@@ -139,3 +130,9 @@ class ControllerNode(Node):
             Trigger,
             'takeoff',
             self.takeoff_clbk)
+
+        # Start racing
+        self.racing_srv = self.create_service(
+            Trigger,
+            'race',
+            self.race_clbk)

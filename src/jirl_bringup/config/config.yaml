@@ -1,6 +1,7 @@
 # Controller
 /*/controller:
   ros__parameters:
+    gate_side: 1.0
     low_level_controller:
       c1: -0.6709
       c2: 0.1932
@@ -8,26 +9,23 @@
       thrust_pwm_min: 10001
       thrust_pwm_max: 60000
     policy:
-      enable: false
-      path: /home/neo/workspace/logs/policies/2025-03-04_01-02-56/model_4999.pt
+      path: /home/neo/workspace/logs/policies/2025-06-06_21-59-54/model_5750_17363.pt
+      waypoints: [
+         0.0, 3.0, 0.75, 0.0, 0.0,  0.0,
+        -2.0, 5.0, 0.75, 0.0, 0.0, -1.5,
+         0.0, 7.0, 1.75, 0.0, 0.0,  3.1,
+         2.0, 5.0, 0.75, 0.0, 0.0,  1.5
+      ]
     takeoff_height: 1.0
 
 # Crazyradio driver
 /crazyradio_driver:
   ros__parameters:
     crazyflie_names: [
-      crazy_jirl_01,
       crazy_jirl_02,
-      crazy_jirl_03_red
-      crazy_jirl_05_red,
-      crazy_jirl_06_red,
     ]
     crazyradio_uris: [
-      radio://0/80/2M/E7E7E70101,
       radio://0/90/2M/E7E7E70102,
-      radio://0/93/2M/E7E7E70103,
-      radio://0/95/2M/E7E7E70105,
-      radio://0/96/2M/E7E7E70106,
     ]
     logger_period_ms: 1000
     reconnection_period_ms: 2000
@@ -44,8 +42,4 @@
     timer_single_pub_freq: 50
     timer_multi_pub_freq: 10
     model_list:
-      - crazy_jirl_01
       - crazy_jirl_02
-      - crazy_jirl_03_red
-      - crazy_jirl_05_red
-      - crazy_jirl_06_red

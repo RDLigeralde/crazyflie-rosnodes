@@ -23,6 +23,9 @@ def update_setpoint_clbk(self, request, response):
             return response
         self.fsm.launch()
         self.get_logger().info(f"[FSM] Waiting for launch...")
+    elif self.fsm.state == 'racing':
+        self.fsm.stop()
+        self.get_logger().info(f"[FSM] Drone is stopping...")
     else:
         self.get_logger().info("Cannot update setpoint from current state")
         response.success = False
@@ -87,9 +90,6 @@ def takeoff_clbk(self, _, response):
     self.t0 = time.time()
     self.p0 = self.mocap_pose['x']
 
-    # Unlock startup thrust protection
-    self.send_twist_command(0, 0.0, 0.0, 0.0, 0.0)
-
     # Change FSM state
     self.fsm.takeoff()
     self.get_logger().info("[FSM] Taking off to %.2f, %.2f, %.2f" % (self.p0[0], self.p0[1], self.takeoff_height))
@@ -108,6 +108,18 @@ def landing_clbk(self, _, response):
 
     self.get_logger().info("[FSM] Landing")
     self.fsm.land()
+
+    response.success = True
+    return response
+
+def race_clbk(self, _, response):
+    if self.fsm.state != 'hovering':
+        self.get_logger().info("Cannot start racing from current state")
+        response.success = False
+        return response
+
+    self.get_logger().info("[FSM] Start racing")
+    self.fsm.race()
 
     response.success = True
     return response
@@ -137,55 +149,56 @@ def mocap_clbk(self, msg: Odometry):
     self.mocap_pose['R'] = R_mat
     self.mocap_pose['q'] = quat
     self.mocap_pose['yaw'] = R.from_matrix(R_mat).as_euler('zyx')[0]
-    if self.policy_enabled:
-        self.mocap_pose['v'] = v_b
-        self.mocap_pose['w'] = w_b
+    self.mocap_pose['v_b'] = v_b
+    self.mocap_pose['w_b'] = w_b
+    self.mocap_pose['v_w'] = v_w
+    self.mocap_pose['w_w'] = w_w
+
+    if self.fsm.state == 'racing':
+        control = self.policy.update(self.mocap_pose)
     else:
-        self.mocap_pose['v'] = v_w
-        self.mocap_pose['w'] = w_w
-
-    if self.fsm.state == 'landed':
-        return
-    elif self.fsm.state == 'taking_off':
-        x0 = [self.p0[0], self.p0[1], self.takeoff_height]
-        self.flat_output = HoverTraj(x0=x0).update(0)
-
-        if (time.time() - self.t0 > 3.0):
-            # Change FSM state
-            self.fsm.in_position()
-            self.get_logger().info("[FSM] Hovering")
-    elif self.fsm.state == 'hovering':
-        pass
-    elif self.fsm.state == 'landing':
-        if (time.time() - self.t0 < 1.0):
-            x0 = [self.p0[0], self.p0[1], 0.15]
-        else:
-            x0 = [self.p0[0], self.p0[1], 0.05]
-        self.flat_output = HoverTraj(x0=x0).update(0)
-
-        if (time.time() - self.t0 > 3.0):
-            for _ in range(30):
-                self.send_twist_command(0, 0.0, 0.0, 0.0, 0.0)
-                time.sleep(0.1)
-
-            self.get_logger().info("[FSM] Landed")
-            self.fsm.landing_complete()
-
+        if self.fsm.state == 'landed':
             return
-    elif self.fsm.state == 'flying':
-        if self.dt > self.traj_duration:
-            self.get_logger().info(f"Finished circular trajectory")
-            self.flat_output = HoverTraj(x0=p).update(0)
-            self.fsm.stop()
-        else:
-            self.dt = time.time() - self.t0
-            self.flat_output = self.trajectory.update(self.dt)
+        elif self.fsm.state == 'taking_off':
+            x0 = [self.p0[0], self.p0[1], self.takeoff_height]
+            self.flat_output = HoverTraj(x0=x0).update(0)
 
-    # Publish trajectory
-    self.send_trajectory(self.flat_output)
+            if (time.time() - self.t0 > 3.0):
+                # Change FSM state
+                self.fsm.in_position()
+                self.get_logger().info("[FSM] Hovering")
+        elif self.fsm.state == 'hovering':
+            pass
+        elif self.fsm.state == 'landing':
+            if (time.time() - self.t0 < 1.0):
+                x0 = [self.p0[0], self.p0[1], 0.15]
+            else:
+                x0 = [self.p0[0], self.p0[1], 0.05]
+            self.flat_output = HoverTraj(x0=x0).update(0)
 
-    # Apply control
-    control = self.controller.update(0, self.mocap_pose, self.flat_output)
+            if (time.time() - self.t0 > 3.0):
+                for _ in range(30):
+                    self.send_ctbr_command(0, 0.0, 0.0, 0.0, 0.0)
+                    time.sleep(0.1)
+
+                self.get_logger().info("[FSM] Landed")
+                self.fsm.landing_complete()
+
+                return
+        elif self.fsm.state == 'flying':
+            if self.dt > self.traj_duration:
+                self.get_logger().info(f"Finished circular trajectory")
+                self.flat_output = HoverTraj(x0=p).update(0)
+                self.fsm.stop()
+            else:
+                self.dt = time.time() - self.t0
+                self.flat_output = self.trajectory.update(self.dt)
+
+        # Publish trajectory
+        self.send_trajectory(self.flat_output)
+
+        # Apply control
+        control = self.se3_controller.update(0, self.mocap_pose, self.flat_output)
 
     c1 = self.low_level_controller_c1
     c2 = self.low_level_controller_c2
@@ -196,7 +209,6 @@ def mocap_clbk(self, msg: Odometry):
     thrust_des_newtons = control['cmd_thrust']
     thrust_des_grams = thrust_des_newtons / 9.81 * 1000
     if c3 + thrust_des_grams < 0:
-        # print("Thrust too negative")
         thrust_des_grams = 0
     thrust_pwm = c1 + c2 * (c3 + thrust_des_grams)**.5
     thrust_pwm = thrust_pwm * thrust_pwm_max + thrust_pwm_min * 1.0
@@ -206,45 +218,3 @@ def mocap_clbk(self, msg: Odometry):
 
     # Publish command msg
     self.send_ctbr_command(thrust_pwm, thrust_des_newtons, w_des[0], w_des[1], w_des[2])
-
-
-
-
-
-    # # Desired TRPY
-    # self.kyaw = 10
-    # thrust_des_newtons = control['cmd_thrust']
-    # thrust_des_grams = thrust_des_newtons/9.81*1000  # Have to convert thrust to grams
-    # q_des = control['cmd_q']
-    # R_des = R.from_quat(q_des).as_matrix()
-    # eul_des = R.from_quat(q_des).as_euler('ZXY', degrees=True)
-    # yaw_des = eul_des[0]
-
-    # # Current RPY
-    # R_cur = R.from_quat(quat)
-    # eul_cur = R_cur.as_euler('ZXY', degrees=True)
-    # yaw_cur = eul_cur[0]
-
-    # # Map the desired onto the current body frame based on yaw
-    # R_z = R.from_rotvec((yaw_cur - yaw_des)*(np.pi/180)*np.array([0,0,1])).as_matrix()
-    # R_des_new = R_des@R_z
-
-    # pitch_des = -np.arcsin(R_des_new[2,0])*180/np.pi
-    # roll_des = np.arctan2(R_des_new[2,1], R_des_new[2,2])*180/np.pi
-
-    # if c3 + thrust_des_grams < 0:
-    #     thrust_des_grams = 0
-    # thrust_pwm = c1 + c2 * (c3 + thrust_des_grams)**.5
-    # thrust_pwm = min(thrust_pwm, 0.9)
-
-    # # Scale to full range
-    # thrust_pwm_max = 60000
-
-    # e_yaw = (yaw_des - yaw_cur)
-    # if e_yaw > 180:
-    #     e_yaw -= 360
-    # elif e_yaw < -180:
-    #     e_yaw += 360
-
-    # # Publish command msg
-    # self.send_twist_command(thrust_pwm, thrust_des_newtons, roll_des, pitch_des, (-self.kyaw * e_yaw))

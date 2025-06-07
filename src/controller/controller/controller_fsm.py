@@ -8,7 +8,8 @@ class ControllerFSM():
             {'name': 'taking_off', 'on_enter': ['print_state']},
             {'name': 'hovering', 'on_enter': ['print_state']},
             {'name': 'flying', 'on_enter': ['print_state']},
-            {'name': 'landing', 'on_enter': ['print_state']}
+            {'name': 'landing', 'on_enter': ['print_state']},
+            {'name': 'racing', 'on_enter': ['print_state']},
         ]
         transitions = [
             {'trigger': 'takeoff',          'source': 'landed',     'dest': 'taking_off'},
@@ -17,7 +18,9 @@ class ControllerFSM():
             {'trigger': 'land',             'source': 'hovering',   'dest': 'landing'},
             {'trigger': 'landing_complete', 'source': 'landing',    'dest': 'landed'},
             {'trigger': 'move',             'source': 'hovering',   'dest': 'flying'},
-            {'trigger': 'stop',             'source': 'flying',     'dest': 'hovering'}
+            {'trigger': 'stop',             'source': 'flying',     'dest': 'hovering'},
+            {'trigger': 'race',             'source': 'hovering',   'dest': 'racing'},
+            {'trigger': 'stop',             'source': 'racing',     'dest': 'hovering'},
         ]
         self.machine = Machine(model=self, states=states, transitions=transitions, initial='landed')
 

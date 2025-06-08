@@ -26,17 +26,5 @@
 
 namespace CrazyradioDriver
 {
-  /**
-   * @brief CommandCTBR callback.
-   */
-  void CrazyradioDriverNode::cmd_clbk(const CommandCTBR::SharedPtr msg)
-  {
-    if (msg->thrust_pwm == 0) {
-      // Arm
-      //
-    }
-  }
-
-  // Send setpoint
 
 } // namespace CrazyradioDriver

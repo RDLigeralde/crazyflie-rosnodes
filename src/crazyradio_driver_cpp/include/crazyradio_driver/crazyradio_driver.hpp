@@ -81,7 +81,6 @@ private:
   rclcpp::TimerBase::SharedPtr reconnect_timer_;
 
   /* Callbacks */
-  void cmd_clbk(const CommandCTBR::SharedPtr msg);
   void reconnect_timer_clbk();
 
   /* Utility routines */

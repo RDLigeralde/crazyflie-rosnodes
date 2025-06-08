@@ -35,10 +35,12 @@ void CrazyradioDriverNode::init_parameters()
   // Declare parameters
   this->declare_parameter("crazyflie_names", rclcpp::ParameterValue(std::vector<std::string>()));
   this->declare_parameter("crazyflie_uris", rclcpp::ParameterValue(std::vector<std::string>()));
+  this->declare_parameter("reconnection_period_ms", rclcpp::ParameterValue(int64_t(0)));
 
   // Get parameters
   crazyflie_names_ = this->get_parameter("crazyflie_names").as_string_array();
   crazyflie_uris_ = this->get_parameter("crazyflie_uris").as_string_array();
+  reconnection_period_ms_ = this->get_parameter("reconnection_period_ms").as_int();
 
   // Print parameters
   RCLCPP_INFO(this->get_logger(), "crazyflie_name:");
@@ -49,6 +51,7 @@ void CrazyradioDriverNode::init_parameters()
   for (const auto & uri : crazyflie_uris_) {
     RCLCPP_INFO(this->get_logger(), "\t- %s", uri.c_str());
   }
+  RCLCPP_INFO(this->get_logger(), "reconnection_period_ms: %d", reconnection_period_ms_);
 }
 
 } // namespace CrazyradioDriver

@@ -32,6 +32,7 @@ namespace CrazyradioDriver
     // Reconnect to the Crazyradio
     //
     RCLCPP_INFO(this->get_logger(), "Reconnecting to Crazyradio");
+    RCLCPP_INFO(this->get_logger(), "is_connected: %d", crazyflie_drivers_[0].get()->isConnected());
     // crazyflie_driver_->reconnect();
   }
 

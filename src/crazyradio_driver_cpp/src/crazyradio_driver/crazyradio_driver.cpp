@@ -124,12 +124,12 @@ void CrazyradioDriverNode::init_subscribers()
 void CrazyradioDriverNode::init_timers()
 {
   // Reconnection
-  // reconnect_timer_ = this->create_wall_timer(
-  //   std::chrono::milliseconds(reconnection_period_ms_),
-  //   std::bind(
-  //     &CrazyradioDriverNode::reconnect_timer_clbk,
-  //     this),
-  //   reconnect_cgroup_);
+  reconnect_timer_ = this->create_wall_timer(
+    std::chrono::milliseconds(reconnection_period_ms_),
+    std::bind(
+      &CrazyradioDriverNode::reconnect_timer_clbk,
+      this),
+    reconnect_cgroup_);
 }
 
 } // namespace CrazyradioDriver

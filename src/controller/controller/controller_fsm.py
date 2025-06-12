@@ -19,7 +19,7 @@ class ControllerFSM():
             {'trigger': 'landing_complete', 'source': 'landing',    'dest': 'landed'},
             {'trigger': 'move',             'source': 'hovering',   'dest': 'flying'},
             {'trigger': 'stop',             'source': 'flying',     'dest': 'hovering'},
-            {'trigger': 'race',             'source': 'hovering',   'dest': 'racing'},
+            {'trigger': 'race',             'source': ['hovering', 'landed'],   'dest': 'racing'},
             {'trigger': 'stop',             'source': 'racing',     'dest': 'hovering'},
         ]
         self.machine = Machine(model=self, states=states, transitions=transitions, initial='landed')

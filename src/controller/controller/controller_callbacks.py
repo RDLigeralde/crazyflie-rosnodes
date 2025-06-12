@@ -3,6 +3,7 @@ import time
 from scipy.spatial.transform import Rotation as R
 
 from nav_msgs.msg import Odometry
+from jirl_interfaces.msg import Observations
 from jirl_interfaces.srv import StartTrajectory
 
 from rotorpy.trajectories.hover_traj import HoverTraj
@@ -113,7 +114,7 @@ def landing_clbk(self, _, response):
     return response
 
 def race_clbk(self, _, response):
-    if self.fsm.state != 'hovering':
+    if self.fsm.state not in ['hovering', 'landed']:
         self.get_logger().info("Cannot start racing from current state")
         response.success = False
         return response
@@ -154,8 +155,20 @@ def mocap_clbk(self, msg: Odometry):
     self.mocap_pose['v_w'] = v_w
     self.mocap_pose['w_w'] = w_w
 
+    # self.swarm._cfs[uri].cf.extpos.send_extpose(
+    #                     x, y, z, quat.x, quat.y, quat.z, quat.w)
+
     if self.fsm.state == 'racing':
-        control = self.policy.update(self.mocap_pose)
+        control, obs = self.policy.update(self.mocap_pose)
+
+        obs_msg = Observations()
+        obs_msg.lin_vel = obs[0:3]
+        obs_msg.rot = obs[3:12]
+        obs_msg.corners_pos_b_curr = obs[12:24]
+        obs_msg.corners_pos_b_next = obs[24:36]
+        obs_msg.cond = obs[36:38]
+
+        self.obs_pub.publish(obs_msg)
     else:
         if self.fsm.state == 'landed':
             return

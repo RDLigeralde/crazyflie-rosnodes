@@ -5,7 +5,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Trigger
-from jirl_interfaces.msg import CommandCTBR, Trajectory
+from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations
 from jirl_interfaces.srv import UpdateSetpoint, StartTrajectory
 
 from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
@@ -79,7 +79,7 @@ class ControllerNode(Node):
         # CTBR command
         if self.crazyradio_driver == 'cpp':
             topic_name = 'ctbr_cmd'
-        elif self.crazyradio_driver in ['cpp', 'py', 'python']:
+        elif self.crazyradio_driver in ['py', 'python']:
             topic_name = '/ctbr_cmd'
         self.cmd_pub = self.create_publisher(
             CommandCTBR,
@@ -91,6 +91,13 @@ class ControllerNode(Node):
         self.traj_pub = self.create_publisher(
             Trajectory,
             'trajectory',
+            qos_best_effort
+        )
+
+        # Observations
+        self.obs_pub = self.create_publisher(
+            Observations,
+            'observations',
             qos_best_effort
         )
 

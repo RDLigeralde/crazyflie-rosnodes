@@ -7,3 +7,6 @@
 [submodule "src/crazyflie-lib-python"]
 	path = src/crazyflie-lib-python
 	url = git@github.com:Jirl-upenn/crazyflie-lib-python.git
+[submodule "src/crazyflie-clients-python"]
+	path = src/crazyflie-clients-python
+	url = git@github.com:Jirl-upenn/crazyflie-clients-python.git

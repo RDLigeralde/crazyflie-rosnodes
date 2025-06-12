@@ -1,7 +1,7 @@
 from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
-from jirl_interfaces.msg import CommandCTBR
+from jirl_interfaces.msg import CommandCTBR, OdometryArray
 
 import cflib.crtp
 from cflib.crazyflie.syncLogger import SyncLogger
@@ -13,7 +13,7 @@ class CrazyradioDriverNode(Node):
 
     # Import methods
     from .crazyradio_driver_params import init_parameters
-    from .crazyradio_driver_callbacks import cmd_clbk, reconnect_clbk #, logger_clbk
+    from .crazyradio_driver_callbacks import cmd_clbk, reconnect_clbk, mocap_clbk #, logger_clbk
 
     scf_dict = {}
 
@@ -51,6 +51,7 @@ class CrazyradioDriverNode(Node):
         """
         # Subscribers
         self.cmd_cgroup = MutuallyExclusiveCallbackGroup()
+        self.mocap_cgroup = MutuallyExclusiveCallbackGroup()
 
         # Timers
         self.logger_cgroup = MutuallyExclusiveCallbackGroup()
@@ -67,6 +68,15 @@ class CrazyradioDriverNode(Node):
             self.cmd_clbk,
             qos_best_effort,
             callback_group=self.cmd_cgroup
+        )
+
+        # Mocap data
+        self.mocap_sub = self.create_subscription(
+            OdometryArray,
+            '/multi_odometry',
+            self.mocap_clbk,
+            qos_best_effort,
+            callback_group=self.mocap_cgroup
         )
 
     def init_timers(self):

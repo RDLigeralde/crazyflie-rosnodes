@@ -1,4 +1,4 @@
-from jirl_interfaces.msg import CommandCTBR
+from jirl_interfaces.msg import CommandCTBR, OdometryArray
 from cflib.utils import uri_helper
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
@@ -6,7 +6,22 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 def cmd_clbk(self, msg: CommandCTBR):
     if msg.crazyflie_name in self.scf_dict:
         scf = self.scf_dict[msg.crazyflie_name]
-        scf.cf.commander.send_setpoint(msg.roll_rate, msg.pitch_rate, msg.yaw_rate, msg.thrust_pwm)  # FIXME: minus sign on yaw
+        scf.cf.commander.send_setpoint(msg.roll_rate, msg.pitch_rate, -msg.yaw_rate, msg.thrust_pwm)
+
+def mocap_clbk(self, msg: OdometryArray):
+    for odom in msg.odom_array:
+        cf_name = odom.child_frame_id.split('/')[0]
+        if cf_name in self.scf_dict:
+            scf = self.scf_dict[cf_name]
+            scf.cf.extpos.send_extpose(
+                odom.pose.pose.position.x,
+                odom.pose.pose.position.y,
+                odom.pose.pose.position.z,
+                odom.pose.pose.orientation.x,
+                odom.pose.pose.orientation.y,
+                odom.pose.pose.orientation.z,
+                odom.pose.pose.orientation.w
+            )
 
 # def logger_clbk(self):
 #     for log_entry in self.sync_logger.next():
@@ -38,5 +53,8 @@ def reconnect_clbk(self):
                 self.get_logger().warn('Sending zero command to %s' % crazyradio_uri)
                 self.scf_dict[crazyflie_name].cf.commander.send_setpoint(0.0, 0.0, 0.0, 0)
                 self.get_logger().warn('Connected to %s' % crazyradio_uri)
+
+                self.scf_dict[crazyflie_name].cf.param.set_value('stabilizer.estimator', '2')
+                self.scf_dict[crazyflie_name].param.set_value('locSrv.extQuatStdDev', 0.06)
             except Exception as e:
                 continue

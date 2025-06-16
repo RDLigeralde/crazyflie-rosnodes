@@ -10,24 +10,24 @@
       thrust_pwm_min: 10001
       thrust_pwm_max: 60000
     policy:
-      path: /home/neo/workspace/logs/policies/2025-06-06_21-59-54/model_5750_17363.pt
+      path: /home/neo/workspace/logs/policies/2025-06-09_04-01-37/model_4999_10034.pt
       waypoints: [
          0.0, 3.0, 0.75, 0.0, 0.0,  0.0,
-        -2.0, 5.0, 0.75, 0.0, 0.0, -1.5,
-         0.0, 7.0, 1.75, 0.0, 0.0,  3.1,
-         2.0, 5.0, 0.75, 0.0, 0.0,  1.5
+        -2.0, 4.5, 0.75, 0.0, 0.0, -1.57,
+         0.0, 6.0, 1.75, 0.0, 0.0,  3.14,
+         2.0, 4.5, 0.75, 0.0, 0.0,  1.57
       ]
-    takeoff_height: 1.0
+    takeoff_height: 0.5
 
 # Crazyradio driver
 /crazyradio_driver:
   ros__parameters:
-    crazyflie_names: [
-      crazy_jirl_02,
-    ]
-    crazyradio_uris: [
-      radio://0/83/2M/E7E7E70102,
-    ]
+    crazyflie_names:
+      - crazy_jirl_01
+      - crazy_jirl_02
+    crazyradio_uris:
+      - radio://0/80/2M/E7E7E70101
+      - radio://0/83/2M/E7E7E70102
     logger_period_ms: 1000
     reconnection_period_ms: 2000
 
@@ -40,7 +40,8 @@
     publish_tf: true
     publish_pts: false
     fixed_frame_id: mocap
-    timer_single_pub_freq: 50
-    timer_multi_pub_freq: 10
+    timer_single_pub_freq: 120
+    timer_multi_pub_freq: 120
     model_list:
+      - crazy_jirl_01
       - crazy_jirl_02

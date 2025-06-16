@@ -3,9 +3,13 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from jirl_interfaces.msg import CommandCTBR, OdometryArray
 
+from cflib.utils import uri_helper
+
 import cflib.crtp
 from cflib.crazyflie.syncLogger import SyncLogger
 from cflib.crazyflie.log import LogConfig
+from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
+from cflib.crazyflie import Crazyflie
 
 from .crazyradio_driver_qos import qos_best_effort, qos_reliable
 
@@ -23,8 +27,31 @@ class CrazyradioDriverNode(Node):
         self.init_parameters()
         self.init_crazyflie()
         self.init_callback_groups()
-        self.init_timers()
+        #self.init_timers()
         self.init_subscriptions()
+
+        for crazyradio_uri, crazyflie_name in zip(self.crazyradio_uris, self.crazyflie_names):
+            if crazyflie_name in self.scf_dict:
+                connected = self.scf_dict[crazyflie_name].is_link_open()
+                if not connected:
+                    self.get_logger().error('Crazyflie %s disconnected' % (crazyflie_name))
+                    self.scf_dict.pop(crazyflie_name)
+            else:
+                self.get_logger().warn('Trying to connect to Crazyflie %s...' % crazyflie_name)
+                try:
+                    URI = uri_helper.uri_from_env(default=crazyradio_uri)
+
+                    self.scf_dict[crazyflie_name] = SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache'))
+                    self.scf_dict[crazyflie_name].open_link()
+
+                    self.get_logger().warn('Sending zero command to %s' % crazyradio_uri)
+                    self.scf_dict[crazyflie_name].cf.commander.send_setpoint(0.0, 0.0, 0.0, 0)
+                    self.get_logger().warn('Connected to %s' % crazyradio_uri)
+
+                    self.scf_dict[crazyflie_name].cf.param.set_value('stabilizer.estimator', '2')
+                    self.scf_dict[crazyflie_name].param.set_value('locSrv.extQuatStdDev', 0.06)
+                except Exception as e:
+                    continue
 
         self.get_logger().info('Node initialized')
 

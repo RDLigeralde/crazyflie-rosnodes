@@ -8,6 +8,7 @@ from scipy.spatial.transform import Rotation as R
 import os
 import sys
 from pathlib import Path # Using pathlib for more modern path manipulation
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 # Ensure Pillow is installed for saving GIFs
 try:
@@ -46,6 +47,27 @@ def set_axes_equal(ax):
   ax.set_zlim(mid_z - max_range, mid_z + max_range)
 
 def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
+  waypoints = np.array([
+      [ 0.0, 3.0, 0.75, 0.0, 0.0,  0.0],
+      [-2.0, 4.5, 0.75, 0.0, 0.0, -1.57],
+      [ 0.0, 6.0, 1.75, 0.0, 0.0,  3.14],
+      [ 2.0, 4.5, 0.75, 0.0, 0.0,  1.57]
+  ])
+
+  d = 0.5
+  local_square = np.array([
+      [0,  d,  d],
+      [0, -d,  d],
+      [0, -d, -d],
+      [0,  d, -d]
+  ])  # shape (4, 3)
+
+  wp_pos = waypoints[:, :3]             # shape (N, 3)
+  wp_euler = waypoints[:, 3:]           # shape (N, 3)
+
+  rotations = R.from_euler('xyz', wp_euler).as_matrix()  # shape (N, 3, 3)
+  verts_all = np.einsum('ij,njk->nik', local_square, rotations) + wp_pos[:, np.newaxis, :]  # shape (N, 4, 3)
+  verts_all_flat = verts_all.reshape(-1, 3)
 
   # --- Path setup for saving plots ---
   bag_path_obj = Path(bag_path).resolve() # Get absolute path
@@ -74,12 +96,10 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
       logs_base_dir = experiment_dir.parent
       plots_parent_dir = logs_base_dir / 'plots'
 
-
   output_plot_dir = plots_parent_dir / experiment_name
   output_plot_dir.mkdir(parents=True, exist_ok=True) # Create directory if it doesn't exist
   print(f"Saving plots and animation to: {output_plot_dir}")
   # --- End Path setup ---
-
 
   reader = rosbag2_py.SequentialReader()
 
@@ -131,7 +151,6 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
            print(f"Error: Could not determine storage type for directory {resolved_bag_path}. No .mcap, .db3, or metadata.yaml found.")
            sys.exit(1)
 
-
   elif resolved_bag_path.is_file():
       if resolved_bag_path.suffix == '.mcap':
           print("Input path is an MCAP file. Setting storage_id='mcap'.")
@@ -181,7 +200,7 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
     print(f"- {topic}: {msg_type}")
 
   # Check if required topics exist
-  required_topics = [f"/{namespace}/odom", f"/{namespace}/ctbr_cmd", f"/{namespace}/trajectory"]
+  required_topics = [f"/{namespace}/observations", f"/{namespace}/odom", f"/{namespace}/ctbr_cmd", f"/{namespace}/trajectory", "/ctbr_cmd"]
   missing_topics = []
   # Check topics with and without leading slash for robustness
   for req_topic in required_topics:
@@ -204,6 +223,7 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
   timestamps = []
   timestamps_cmd = []
   timestamps_traj = []
+  timestamps_obs = []
   gt_pos = {"x": [], "y": [], "z": []}
   gt_quat = {"x": [], "y": [], "z": [], "w": []}
   gt_euler = {"roll": [], "pitch": [], "yaw": []}
@@ -214,6 +234,7 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
   roll_rate = []
   pitch_rate = []
   yaw_rate = []
+  dist_next_gate = []
   traj = {"x": [], "x_dot": [], "x_ddot": [], "x_dddot": [], "x_ddddot": [],
           "yaw": [], "yaw_dot": [], "yaw_ddot": []}
 
@@ -253,11 +274,11 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
             print(f"Error deserializing message for topic {topic} ({msg_type}): {e}")
             continue # Skip this message
 
-
         # --- Topic processing ---
         odom_topic = f"{namespace}/odom".lstrip('/')
         cmd_topic = f"/{namespace}/ctbr_cmd".lstrip('/')
         traj_topic = f"{namespace}/trajectory".lstrip('/')
+        obs_topic = f"/{namespace}/observations".lstrip('/')
 
         if normalized_topic == odom_topic:
           timestamps.append(rel_time)
@@ -309,6 +330,36 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
           traj["yaw"].append(getattr(message, 'yaw', float('nan')))
           traj["yaw_dot"].append(getattr(message, 'yaw_dot', float('nan')))
           traj["yaw_ddot"].append(getattr(message, 'yaw_ddot', float('nan')))
+
+        elif normalized_topic == 'ctbr_cmd':
+            # Check if message has crazyflie_name (assuming specific message type)
+            # Make the check more robust in case the attribute doesn't exist
+            cf_name_in_msg = getattr(message, 'crazyflie_name', None) # Returns None if not present
+            # Check if the attribute exists AND if the namespace is in the list/string
+            if cf_name_in_msg is not None and namespace in cf_name_in_msg:
+                timestamps_cmd.append(rel_time)
+                # Check for attributes before accessing to prevent errors on malformed msgs
+                thrust_pwm.append(getattr(message, 'thrust_pwm', float('nan')))
+                thrust_N.append(getattr(message, 'thrust_n', float('nan')))
+                roll_rate.append(getattr(message, 'roll_rate', float('nan')))
+                pitch_rate.append(getattr(message, 'pitch_rate', float('nan')))
+                yaw_rate.append(getattr(message, 'yaw_rate', float('nan')))
+            # If the attribute doesn't exist, maybe it's a generic command? Or log warning.
+            elif cf_name_in_msg is None:
+                # Decide: skip, process anyway, or warn? Let's warn and process.
+                # print(f"Warning: /ctbr_cmd message at {rel_time:.2f}s lacks 'crazyflie_name'. Assuming it applies to {namespace}.")
+                timestamps_cmd.append(rel_time)
+                thrust_pwm.append(getattr(message, 'thrust_pwm', float('nan')))
+                thrust_N.append(getattr(message, 'thrust_n', float('nan')))
+                roll_rate.append(getattr(message, 'roll_rate', float('nan')))
+                pitch_rate.append(getattr(message, 'pitch_rate', float('nan')))
+                yaw_rate.append(getattr(message, 'yaw_rate', float('nan')))
+
+        elif normalized_topic == obs_topic:
+            timestamps_obs.append(rel_time)
+            corners = getattr(message, 'corners_pos_b_curr', float('nan')).reshape(4,3)
+            mean_point = corners.mean(axis=0)
+            dist_next_gate.append(np.linalg.norm(mean_point))
 
     except StopIteration: # This is expected when the reader finishes
         break
@@ -537,6 +588,87 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
   else:
     print("Skipping CTBR command plot (no command data found/processed).")
 
+  # --- Observations ---
+  if timestamps_obs:
+    fig_obs, axs_obs = plt.subplots(2, 1, figsize=figsize, sharex=True)
+    fig_obs.suptitle(f"Distance from next gate ({namespace})")
+
+    axs_obs[0].plot(timestamps_obs, dist_next_gate)
+    axs_obs[0].set_ylabel("m")
+    axs_obs[0].grid(True)
+
+    fig_obs.tight_layout(rect=[0, 0.03, 1, 0.97])
+    obs_filename = output_plot_dir / f"{namespace}_obs_commands"
+    try:
+        print(f"Saving obs command plot to {obs_filename}")
+        fig_obs.savefig(obs_filename.with_suffix('.eps'), format='eps', bbox_inches='tight', dpi=300, facecolor=fig_obs.get_facecolor())
+        fig_obs.savefig(obs_filename.with_suffix('.png'), format='png', bbox_inches='tight', dpi=300, facecolor=fig_obs.get_facecolor())
+    except Exception as e:
+        print(f"Error saving obs plot: {e}")
+  else:
+    print("Skipping obs command plot (no command data found/processed).")
+
+#   # --- CTBR and position
+#   def normalize_to_unit_range(x):
+#     """Scala l’array x tra -1 e 1."""
+#     x = np.array(x, dtype=float)
+#     x_min, x_max = np.min(x), np.max(x)
+#     if x_max == x_min:
+#         return np.zeros_like(x)
+#     return 2 * (x - x_min) / (x_max - x_min) - 1
+
+#   thrust_n    = normalize_to_unit_range(thrust_pwm)
+#   roll_n      = normalize_to_unit_range(roll_rate)
+#   pitch_n     = normalize_to_unit_range(pitch_rate)
+#   yaw_n       = normalize_to_unit_range(yaw_rate)
+
+#   fig_ctbr_pos, ax = plt.subplots(2, 1, figsize=figsize)
+#   fig_ctbr_pos.suptitle(f"CTBR vs Position ({namespace})")
+
+#   gt_pos_x = np.array(gt_pos["x"])
+#   gt_pos_y = np.array(gt_pos["y"])
+#   gt_pos_z = np.array(gt_pos["z"])
+
+#   # Filtro: solo dati tra 3 e 4 secondi
+#   mask_cmd = (np.array(timestamps_cmd) >= 0.0) & (np.array(timestamps_cmd) <= 6.0)
+#   mask_gt = (np.array(timestamps) >= 0.0) & (np.array(timestamps) <= 6.0)
+
+#   # Plot normalized commands
+#   ax[0].plot(np.array(timestamps_cmd)[mask_cmd], thrust_n[mask_cmd], label="Thrust PWM")
+#   ax[0].plot(np.array(timestamps_cmd)[mask_cmd], roll_n[mask_cmd],   label="Roll Rate Cmd")
+#   ax[0].plot(np.array(timestamps_cmd)[mask_cmd], pitch_n[mask_cmd],  label="Pitch Rate Cmd")
+#   ax[0].plot(np.array(timestamps_cmd)[mask_cmd], yaw_n[mask_cmd],    label="Yaw Rate Cmd")
+
+#   ax[0].set_xlabel("Time [s]")
+#   ax[0].set_ylabel("Normalized Commands")
+#   ax[0].set_ylim(-1.1, 1.1)
+#   ax[0].legend()
+#   ax[0].grid(True)
+
+#   # Plot position
+#   print(gt_pos_x[0], gt_pos_y[0], gt_euler['yaw'][0])
+#   input()
+#   n = 180
+#   ax[1].plot(np.array(timestamps)[mask_gt][n:], gt_pos_x[mask_gt][n:], label="X")
+#   ax[1].plot(np.array(timestamps)[mask_gt][n:], gt_pos_y[mask_gt][n:], label="Y")
+#   ax[1].plot(np.array(timestamps)[mask_gt][n:], gt_pos_z[mask_gt][n:], label="Z")
+
+#   ax[1].set_xlabel("Time [s]")
+#   ax[1].set_ylabel("Position")
+#   ax[1].legend()
+#   ax[1].grid(True)
+
+#   fig_ctbr_pos.tight_layout(rect=[0, 0.03, 1, 0.97])
+#   # ctbr_filename = output_plot_dir / f"{namespace}_ctbr_commands"
+#   # try:
+#   #     print(f"Saving CTBR command plot to {ctbr_filename}")
+#   #     fig_ctbr_pos.savefig(ctbr_filename.with_suffix('.eps'), format='eps', bbox_inches='tight', dpi=300, facecolor=fig_ctbr.get_facecolor())
+#   #     fig_ctbr_pos.savefig(ctbr_filename.with_suffix('.png'), format='png', bbox_inches='tight', dpi=300, facecolor=fig_ctbr.get_facecolor())
+#   # except Exception as e:
+#   #     print(f"Error saving CTBR plot: {e}")
+#   # else:
+#   #   print("Skipping CTBR command plot (no command data found/processed).")
+
 
   # --- Trajectory 3D plot ---
   fig3d = plt.figure(figsize=figsize)
@@ -548,6 +680,14 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
   # Plot desired trajectory if available and valid
   if timestamps_traj and traj["x"].ndim == 2 and traj["x"].shape[0] > 0:
        ax3d.plot(traj["x"][:, 0], traj["x"][:, 1], traj["x"][:, 2], label="Desired Trajectory", linestyle='--', color='orange')
+
+  square_color = 'cyan'
+  square_alpha = 0.3
+
+  for square in verts_all:
+      # square è (4, 3): una lista di vertici
+      poly = Poly3DCollection([square], color=square_color, alpha=square_alpha, edgecolor='k')
+      ax3d.add_collection3d(poly)
 
   ax3d.set_xlabel("x [m]")
   ax3d.set_ylabel("y [m]")

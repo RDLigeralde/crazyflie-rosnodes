@@ -155,8 +155,6 @@ def mocap_clbk(self, msg: Odometry):
     self.mocap_pose['v_w'] = v_w
     self.mocap_pose['w_w'] = w_w
 
-    # self.swarm._cfs[uri].cf.extpos.send_extpose(
-    #                     x, y, z, quat.x, quat.y, quat.z, quat.w)
 
     if self.fsm.state == 'racing':
         control, obs = self.policy.update(self.mocap_pose)

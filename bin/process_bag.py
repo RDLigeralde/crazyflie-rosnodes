@@ -9,6 +9,7 @@ import os
 import sys
 from pathlib import Path # Using pathlib for more modern path manipulation
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+import yaml
 
 # Ensure Pillow is installed for saving GIFs
 try:
@@ -47,12 +48,12 @@ def set_axes_equal(ax):
   ax.set_zlim(mid_z - max_range, mid_z + max_range)
 
 def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
-  waypoints = np.array([
-      [ 0.0, 3.0, 0.75, 0.0, 0.0,  0.0],
-      [-2.0, 4.5, 0.75, 0.0, 0.0, -1.57],
-      [ 0.0, 6.0, 1.75, 0.0, 0.0,  3.14],
-      [ 2.0, 4.5, 0.75, 0.0, 0.0,  1.57]
-  ])
+  yaml_file = '/home/neo/workspace/src/jirl_bringup/config/config.yaml'
+  with open(yaml_file, 'r') as f:
+    data = yaml.safe_load(f)
+  waypoints = np.array(data["/*/controller"]["ros__parameters"]["policy"]["waypoints"]).reshape(-1, 6)
+
+  print("Waypoints:", waypoints)
 
   d = 0.5
   local_square = np.array([
@@ -67,7 +68,6 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
 
   rotations = R.from_euler('xyz', wp_euler).as_matrix()  # shape (N, 3, 3)
   verts_all = np.einsum('ij,njk->nik', local_square, rotations) + wp_pos[:, np.newaxis, :]  # shape (N, 4, 3)
-  verts_all_flat = verts_all.reshape(-1, 3)
 
   # --- Path setup for saving plots ---
   bag_path_obj = Path(bag_path).resolve() # Get absolute path
@@ -292,8 +292,8 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
           gt_lin_vel["x"].append(message.twist.twist.linear.x)
           gt_lin_vel["y"].append(message.twist.twist.linear.y)
           gt_lin_vel["z"].append(message.twist.twist.linear.z)
-          gt_ang_vel["x"].append(message.twist.twist.angular.x * 180.0 / np.pi)
-          gt_ang_vel["y"].append(message.twist.twist.angular.y * 180.0 / np.pi)
+          gt_ang_vel["x"].append(-message.twist.twist.angular.x * 180.0 / np.pi)
+          gt_ang_vel["y"].append(-message.twist.twist.angular.y * 180.0 / np.pi)
           gt_ang_vel["z"].append(message.twist.twist.angular.z * 180.0 / np.pi)
         elif normalized_topic == cmd_topic:
            # Check if message has crazyflie_name (assuming specific message type)
@@ -373,6 +373,14 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
         continue # Try processing next message
 
   print(f"Finished reading bag data. Read {message_count} messages total, processed {processed_count} within time range [{t0}, {tf}].")
+
+  # -- Print initial pose ---
+  quat = [gt_quat["x"][0], gt_quat["y"][0], gt_quat["z"][0], gt_quat["w"][0]]
+  rpy = R.from_quat(quat).as_euler('xyz', degrees=True)  # 'xyz' = roll, pitch, yaw
+
+  print("Initial pose:")
+  print(f"Position: x = {gt_pos['x'][0]:.3f}, y = {gt_pos['y'][0]:.3f}, z = {gt_pos['z'][0]:.3f}")
+  print(f"Orientation (RPY): roll = {rpy[0]:.3f}°, pitch = {rpy[1]:.3f}°, yaw = {rpy[2]:.3f}°")
 
   # --- Data processing and Plotting ---
 

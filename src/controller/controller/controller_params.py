@@ -1,4 +1,4 @@
-import torch
+import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 def init_parameters(self):
@@ -30,8 +30,8 @@ def init_parameters(self):
     self.low_level_controller_thrust_pwm_max = self.get_parameter('low_level_controller.thrust_pwm_max').value
     self.policy_path = self.get_parameter('policy.path').value
     self.takeoff_height = self.get_parameter('takeoff_height').value
-    waypoints_flat = torch.tensor(self.get_parameter('policy.waypoints').value)
-    self.waypoints = waypoints_flat.view(-1, 6)
+    waypoints_flat = np.array(self.get_parameter('policy.waypoints').value, dtype=np.float32)
+    self.waypoints = waypoints_flat.reshape(-1, 6)
 
     # Print parameters
     self.get_logger().info(f'crazyradio_driver: {self.crazyradio_driver}')
@@ -42,14 +42,13 @@ def init_parameters(self):
     self.get_logger().info(f'thrust_pwm_min: {self.low_level_controller_thrust_pwm_min}')
     self.get_logger().info(f'thrust_pwm_max: {self.low_level_controller_thrust_pwm_max}')
     self.get_logger().info(f'policy_path: {self.policy_path}')
-    self.get_logger().info(f'policy_waypoints: {self.waypoints}')
+    self.get_logger().info(f'policy_waypoints:\n{self.waypoints}')
     self.get_logger().info(f'takeoff_height: {self.takeoff_height}')
 
     #
-    self.waypoints_quat = torch.zeros(self.waypoints.shape[0], 4, device=self.device)
+    self.waypoints_quat = np.zeros((self.waypoints.shape[0], 4), dtype=np.float32)
 
     for i, waypoint_data in enumerate(self.waypoints):
-        euler_angles_tensor = waypoint_data[3:6]
-        euler_np = euler_angles_tensor.cpu().numpy()
+        euler_np = waypoint_data[3:6]
         rot_from_euler = R.from_euler('xyz', euler_np)
-        self.waypoints_quat[i, :] = torch.tensor(rot_from_euler.as_quat(scalar_first=True), device=self.device, dtype=torch.float32)
+        self.waypoints_quat[i, :] = rot_from_euler.as_quat(scalar_first=True)

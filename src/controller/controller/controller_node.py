@@ -25,7 +25,6 @@ class ControllerNode(Node):
     from .controller_callbacks import mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk, race_clbk
     from .controller_utils import send_ctbr_command, send_trajectory
 
-    mocap_lock = Lock()
     traj_lock = Lock()
     mocap_pose = {}
     device = torch.device('cpu')
@@ -36,12 +35,12 @@ class ControllerNode(Node):
         self.init_parameters()
         self.init_fsm()
         self.init_publishers()
-        self.init_controller()
+        self.init_controllers()
         self.init_callback_groups()
         self.init_services()
         self.init_subscriptions()
 
-        self.get_logger().info('Node initialized')
+        self.get_logger().warn('Node initialized')
 
     def cleanup(self):
         pass
@@ -55,9 +54,9 @@ class ControllerNode(Node):
     def print_state(self):
         self.get_logger().info(f'Entering state: {self.fsm.state}')
 
-    def init_controller(self):
+    def init_controllers(self):
         """
-        Init controller
+        Init controllers
         """
         self.policy = RacingPolicy(crazyflie_params, self.policy_path, self.waypoints, self.waypoints_quat, self.gate_side, device=self.device)
         self.se3_controller = SE3ControlCTBR(crazyflie_params)

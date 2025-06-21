@@ -56,30 +56,47 @@ class RacingPolicy:
 
         self.scale_output = scale_output
 
+        self.waypoints = waypoints
+        self.waypoints_quat = waypoints_quat
+
+        self.gate_side = gate_side
+        d = gate_side / 2
+        self.local_square = np.array([
+            [0,  d,  d],
+            [0, -d,  d],
+            [0, -d, -d],
+            [0,  d, -d]
+        ], dtype=np.float32)
+
         # Create network
-        self.model = FiLMActor(self.obs_dim, [128, 128], self.action_dim, 2, [3,3], nn.ELU).to(self.device)
+        self.model = FiLMActor(self.obs_dim, [128, 128], self.action_dim, 2, [3, 3], nn.ELU).to(self.device)
+        checkpoint = torch.load(model_path, map_location=self.device)
         # Load checkpoint
-        checkpoint = torch.load(model_path, map_location=self.device, weights_only=True)
         actor_state_dict = {k: v for k, v in checkpoint["model_state_dict"].items() if "actor" in k}
         self.model.load_state_dict(actor_state_dict, strict=True)
-
+        # Compile network
+        self.model = torch.compile(self.model)
         self.model.eval()
+        # Warm-up network
+        with torch.no_grad():
+            dummy_obs = torch.zeros(self.obs_dim, dtype=torch.float32, device=self.device)
+            _ = self.model(dummy_obs)q
 
         ######  Min/max values for scaling control outputs.
         rotor_speed_max = self.quadrotor['rotor_speed_max']
         rotor_speed_min = self.quadrotor['rotor_speed_min']
 
-        # Compute the min/max thrust by assuming the rotor is spinning at min/max speed. (also generalizes to bidirectional rotors)
-        self.max_thrust = self.quadrotor['k_eta'] * rotor_speed_max**2
-        self.min_thrust = self.quadrotor['k_eta'] * rotor_speed_min**2
+        # Compute the min/max thrust by assuming the rotor is spinning at min/max speed.
+        self.max_thrust = self.quadrotor['num_rotors'] * self.quadrotor['k_eta'] * rotor_speed_max**2     # TODO
+        self.min_thrust = self.quadrotor['num_rotors'] * self.quadrotor['k_eta'] * rotor_speed_min**2
 
         # Set the maximum body rate on each axis (this is hand selected), rad/s
-        self.max_roll_br = self.max_pitch_br = 1.5
-        self.max_yaw_br = -1.0
+        self.max_roll_br = self.max_pitch_br = 100.0
+        self.max_yaw_br = 200.0
 
         self.idx_wp = 0
 
-        self.cond_twr = torch.tensor([1.4])
+        self.cond_twr = torch.tensor([1.8])
         self.cond_perc = torch.tensor([0.0])
 
     def update(self, state):
@@ -91,10 +108,9 @@ class RacingPolicy:
          Output:
             control_input and observation vector:
         """
-        pos_drone = torch.tensor(state['x'], dtype=torch.float32, device=self.device)
-        lin_vel_drone = torch.tensor(state['v_b'], dtype=torch.float32, device=self.device)
-        quat_drone = torch.tensor(state['q'], dtype=torch.float32, device=self.device)
-        rot_drone = torch.tensor(R.from_quat(quat_drone, scalar_first=False).as_matrix(), dtype=torch.float32, device=self.device)
+        pos_drone = state['x']
+        lin_vel_drone = state['v_b']
+        rot_drone = state['R']
 
         curr_idx = self.idx_wp
         next_idx = (self.idx_wp + 1) % self.waypoints.shape[0]
@@ -103,76 +119,67 @@ class RacingPolicy:
         wp_next_pos = self.waypoints[next_idx, :3]
         quat_curr = self.waypoints_quat[curr_idx, :]
         quat_next = self.waypoints_quat[next_idx, :]
-        rot_curr = torch.tensor(R.from_quat(quat_curr, scalar_first=True).as_matrix(), dtype=torch.float32, device=self.device)
-        rot_next = torch.tensor(R.from_quat(quat_next, scalar_first=True).as_matrix(), dtype=torch.float32, device=self.device)
+        rot_curr = R.from_quat(quat_curr, scalar_first=True).as_matrix()
+        rot_next = R.from_quat(quat_next, scalar_first=True).as_matrix()
 
         pose_drone_wrt_gate = self._subtract_frame_transforms(wp_curr_pos, rot_curr, pos_drone)
-        if torch.norm(pose_drone_wrt_gate) < self.gate_side and pose_drone_wrt_gate[0] < 0.10:
+        if np.linalg.norm(pose_drone_wrt_gate) < self.gate_side and pose_drone_wrt_gate[0] < 0.10:
             self.idx_wp = (self.idx_wp + 1) % self.waypoints.shape[0]
 
-        verts_curr = self.local_square @ rot_curr.T + wp_curr_pos.unsqueeze(0)
-        verts_next = self.local_square @ rot_next.T + wp_next_pos.unsqueeze(0)
+        verts_curr = self.local_square @ rot_curr.T + wp_curr_pos
+        verts_next = self.local_square @ rot_next.T + wp_next_pos
 
-        waypoint_pos_b_curr = self._subtract_frame_transforms(pos_drone, rot_drone, verts_curr)
-        waypoint_pos_b_next = self._subtract_frame_transforms(pos_drone, rot_drone, verts_next)
-
-        waypoint_pos_b_curr = waypoint_pos_b_curr.view(4, 3)
-        waypoint_pos_b_next = waypoint_pos_b_next.view(4, 3)
+        waypoint_pos_b_curr = self._subtract_frame_transforms(pos_drone, rot_drone, verts_curr).reshape(4, 3)
+        waypoint_pos_b_next = self._subtract_frame_transforms(pos_drone, rot_drone, verts_next).reshape(4, 3)
 
         obs = torch.cat(
             [
-                lin_vel_drone.flatten(),
-                rot_drone.flatten(),
-                waypoint_pos_b_curr.flatten(),
-                waypoint_pos_b_next.flatten(),
+                torch.from_numpy(lin_vel_drone).flatten(),
+                torch.from_numpy(rot_drone).flatten(),
+                torch.from_numpy(waypoint_pos_b_curr).flatten(),
+                torch.from_numpy(waypoint_pos_b_next).flatten(),
                 self.cond_twr.flatten(),
                 self.cond_perc.flatten()
             ],
-            dim=-1,
-        )
+            dim=-1
+        ).to(dtype=torch.float32, device=self.device)
 
-        print(obs[0:3])
-        print(obs[3:12])
-        print()
-        print(obs[12:15])
-        print(obs[15:18])
-        print(obs[18:21])
-        print(obs[21:24])
-        print()
-        print(obs[24:27])
-        print(obs[27:30])
-        print(obs[30:33])
-        print(obs[33:36])
-        print()
-        print(obs[36:38])
-        print()
-        print()
-        print(wp_curr_pos)
-        print(self.idx_wp)
-
-        actions = self.model(obs).squeeze(0).detach().cpu().numpy()
-        print(actions)
+        with torch.no_grad():
+            actions = self.model(obs).squeeze(0).cpu().numpy()
         actions = np.clip(actions, -1, 1)
 
-        num_rotors = self.quadrotor['num_rotors']
+        # print('Linear velocity:')
+        # print(obs[0:3])
+        # print('Rotation:')
+        # print(obs[3:12])
+        # print('Corners curr:')
+        # print(obs[12:15])
+        # print(obs[15:18])
+        # print(obs[18:21])
+        # print(obs[21:24])
+        # print('Corners next:')
+        # print(obs[24:27])
+        # print(obs[27:30])
+        # print(obs[30:33])
+        # print(obs[33:36])
+        # print('Conditioning:')
+        # print(obs[36:38])
+        # print('Waypoint index:')
+        # print(self.idx_wp)
+        # print('Actions:')
+        # print(actions)
+        # print()
 
         if self.scale_output:
-            cmd_thrust = np.interp(actions[0],
-                                   [-1, 1],
-                                   [num_rotors * self.min_thrust, num_rotors * self.max_thrust])
+            u = 0.5 * (actions[0] + 1.0)
+            cmd_thrust = (1 - u) * self.min_thrust + u * self.max_thrust
 
-            roll_br = np.interp(actions[1],
-                                [-1, 1],
-                                [-self.max_roll_br, self.max_roll_br])
-            pitch_br = np.interp(actions[2],
-                                 [-1, 1],
-                                 [-self.max_pitch_br, self.max_pitch_br])
-            yaw_br = np.interp(actions[3],
-                               [-1, 1],
-                               [-self.max_yaw_br, self.max_yaw_br])
+            roll_br  = actions[1] * self.max_roll_br
+            pitch_br = actions[2] * self.max_pitch_br
+            yaw_br   = actions[3] * self.max_yaw_br
 
         control_input = {'cmd_thrust': cmd_thrust,
-                         'cmd_w': np.array([roll_br, pitch_br, yaw_br]) * 180 / np.pi}
+                         'cmd_w': np.array([roll_br, pitch_br, yaw_br])}
 
         return control_input, obs
 

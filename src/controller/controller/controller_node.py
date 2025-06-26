@@ -5,7 +5,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Trigger
-from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations
+from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations, OdometryArray
 from jirl_interfaces.srv import UpdateSetpoint, StartTrajectory
 
 from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
@@ -13,6 +13,11 @@ from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
 from rotorpy.vehicles.crazyflie_params import quad_params as crazyflie_params
 
 import torch
+
+import cflib.crtp
+from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
+from cflib.crazyflie import Crazyflie
+from cflib.utils import uri_helper
 
 from .controller_qos import *
 from .controller_fsm import ControllerFSM
@@ -22,17 +27,20 @@ class ControllerNode(Node):
 
     # Import methods
     from .controller_params import init_parameters
-    from .controller_callbacks import mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk, race_clbk
-    from .controller_utils import send_ctbr_command, send_trajectory
+    from .controller_callbacks import mocap_clbk, multi_mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk, race_clbk
+    from .controller_utils import send_ctbr_command, send_trajectory, single_update
 
     traj_lock = Lock()
     mocap_pose = {}
     device = torch.device('cpu')
 
+    scf_dict = {}
+
     def __init__(self):
         super().__init__('controller')
 
         self.init_parameters()
+        self.init_crazyflie()
         self.init_fsm()
         self.init_publishers()
         self.init_controllers()
@@ -43,7 +51,38 @@ class ControllerNode(Node):
         self.get_logger().warn('Node initialized')
 
     def cleanup(self):
-        pass
+        for scf in self.scf_dict.values():
+            scf.close_link()
+
+    def init_crazyflie(self):
+        """
+        Init crazyflie
+        """
+        if self.driver_enable:
+            cflib.crtp.init_drivers()
+
+            for crazyradio_uri, crazyflie_name in zip(self.driver_uris, self.driver_names):
+                if crazyflie_name in self.scf_dict:
+                    connected = self.scf_dict[crazyflie_name].is_link_open()
+                    if not connected:
+                        self.get_logger().error('Crazyflie %s disconnected' % (crazyflie_name))
+                        self.scf_dict.pop(crazyflie_name)
+                else:
+                    self.get_logger().warn('Trying to connect to Crazyflie %s...' % crazyflie_name)
+                    try:
+                        URI = uri_helper.uri_from_env(default=crazyradio_uri)
+
+                        self.scf_dict[crazyflie_name] = SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache'))
+                        self.scf_dict[crazyflie_name].open_link()
+
+                        self.get_logger().warn('Sending zero command to %s' % crazyradio_uri)
+                        self.scf_dict[crazyflie_name].cf.commander.send_setpoint(0.0, 0.0, 0.0, 0)
+                        self.get_logger().warn('Connected to %s' % crazyradio_uri)
+
+                        self.scf_dict[crazyflie_name].cf.param.set_value('stabilizer.estimator', '2')
+                        self.scf_dict[crazyflie_name].param.set_value('locSrv.extQuatStdDev', 0.06)
+                    except Exception as e:
+                        continue
 
     def init_fsm(self):
         """
@@ -76,10 +115,14 @@ class ControllerNode(Node):
         Init publishers
         """
         # CTBR command
-        if self.crazyradio_driver == 'cpp':
-            topic_name = 'ctbr_cmd'
-        elif self.crazyradio_driver in ['py', 'python']:
+        if not self.driver_enable:
+            if self.driver_ext == 'cpp':
+                topic_name = 'ctbr_cmd'
+            elif self.driver_ext in ['py', 'python']:
+                topic_name = '/ctbr_cmd'
+        else:
             topic_name = '/ctbr_cmd'
+
         self.cmd_pub = self.create_publisher(
             CommandCTBR,
             topic_name,
@@ -104,14 +147,24 @@ class ControllerNode(Node):
         """
         Init subscriptions
         """
-        # Mocap odometry
-        self.mocap_sub = self.create_subscription(
-            Odometry,
-            '/mocap',
-            self.mocap_clbk,
-            qos_best_effort,
-            callback_group=self.mocap_cgroup
-        )
+        if self.driver_enable:
+            # Multi mocap odometry
+            self.mocap_sub = self.create_subscription(
+                OdometryArray,
+                '/multi_odometry',
+                self.multi_mocap_clbk,
+                qos_best_effort,
+                callback_group=self.mocap_cgroup
+            )
+        else:
+            # Mocap odometry
+            self.mocap_sub = self.create_subscription(
+                Odometry,
+                '/mocap',
+                self.mocap_clbk,
+                qos_best_effort,
+                callback_group=self.mocap_cgroup
+            )
 
     def init_services(self):
         """

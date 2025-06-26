@@ -1,9 +1,8 @@
 import numpy as np
 import time
-from scipy.spatial.transform import Rotation as R
 
 from nav_msgs.msg import Odometry
-from jirl_interfaces.msg import Observations
+from jirl_interfaces.msg import OdometryArray
 from jirl_interfaces.srv import StartTrajectory
 
 from rotorpy.trajectories.hover_traj import HoverTraj
@@ -138,94 +137,32 @@ def mocap_clbk(self, msg: Odometry):
     """
     Mocap odometry callback
     """
-    p = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z])
-    v_w = np.array([msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z])
-    w_w = np.array([msg.twist.twist.angular.x, msg.twist.twist.angular.y, msg.twist.twist.angular.z])
-    quat = [msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w]
-    R_mat = R.from_quat(quat).as_matrix()
-    v_b = R_mat.T @ v_w
-    w_b = R_mat.T @ w_w
+    self.single_update(msg)
 
-    self.mocap_pose['x'] = p
-    self.mocap_pose['R'] = R_mat
-    self.mocap_pose['q'] = quat
-    self.mocap_pose['yaw'] = R.from_matrix(R_mat).as_euler('zyx')[0]
-    self.mocap_pose['v_b'] = v_b
-    self.mocap_pose['w_b'] = w_b
-    self.mocap_pose['v_w'] = v_w
-    self.mocap_pose['w_w'] = w_w
-
-
-    if self.fsm.state == 'racing':
-        control, obs = self.policy.update(self.mocap_pose)
-
-        obs_msg = Observations()
-        obs_msg.lin_vel = obs[0:3]
-        obs_msg.rot = obs[3:12]
-        obs_msg.corners_pos_b_curr = obs[12:24]
-        obs_msg.corners_pos_b_next = obs[24:36]
-        obs_msg.cond = obs[36:38]
-
-        self.obs_pub.publish(obs_msg)
-    else:
-        if self.fsm.state == 'landed':
+def multi_mocap_clbk(self, msg_array: OdometryArray):
+    """
+    Multi mocap odometry callback
+    """
+    for msg in msg_array.odom_array:
+        cmds = self.single_update(msg)
+        if cmds is not None:
+            thrust_pwm, roll_rate, pitch_rate, yaw_rate = cmds
+        else:
             return
-        elif self.fsm.state == 'taking_off':
-            x0 = [self.p0[0], self.p0[1], self.takeoff_height]
-            self.flat_output = HoverTraj(x0=x0).update(0)
 
-            if (time.time() - self.t0 > 3.0):
-                # Change FSM state
-                self.fsm.in_position()
-                self.get_logger().info("[FSM] Hovering")
-        elif self.fsm.state == 'hovering':
-            pass
-        elif self.fsm.state == 'landing':
-            if (time.time() - self.t0 < 1.0):
-                x0 = [self.p0[0], self.p0[1], 0.15]
-            else:
-                x0 = [self.p0[0], self.p0[1], 0.05]
-            self.flat_output = HoverTraj(x0=x0).update(0)
+        cf_name = msg.child_frame_id.split('/')[0]
+        if cf_name in self.scf_dict:
+            scf = self.scf_dict[cf_name]
+            scf.cf.extpos.send_extpose(
+                msg.pose.pose.position.x,
+                msg.pose.pose.position.y,
+                msg.pose.pose.position.z,
+                msg.pose.pose.orientation.x,
+                msg.pose.pose.orientation.y,
+                msg.pose.pose.orientation.z,
+                msg.pose.pose.orientation.w
+            )
 
-            if (time.time() - self.t0 > 3.0):
-                for _ in range(30):
-                    self.send_ctbr_command(0, 0.0, 0.0, 0.0, 0.0)
-                    time.sleep(0.1)
-
-                self.get_logger().info("[FSM] Landed")
-                self.fsm.landing_complete()
-
-                return
-        elif self.fsm.state == 'flying':
-            if self.dt > self.traj_duration:
-                self.get_logger().info(f"Finished circular trajectory")
-                self.flat_output = HoverTraj(x0=p).update(0)
-                self.fsm.stop()
-            else:
-                self.dt = time.time() - self.t0
-                self.flat_output = self.trajectory.update(self.dt)
-
-        # Publish trajectory
-        self.send_trajectory(self.flat_output)
-
-        # Apply control
-        control = self.se3_controller.update(0, self.mocap_pose, self.flat_output)
-
-    c1 = self.low_level_controller_c1
-    c2 = self.low_level_controller_c2
-    c3 = self.low_level_controller_c3
-    thrust_pwm_min = self.low_level_controller_thrust_pwm_min
-    thrust_pwm_max = self.low_level_controller_thrust_pwm_max
-
-    thrust_des_newtons = control['cmd_thrust']
-    thrust_des_grams = thrust_des_newtons / 9.81 * 1000
-    if c3 + thrust_des_grams < 0:
-        thrust_des_grams = 0
-    thrust_pwm = c1 + c2 * (c3 + thrust_des_grams)**.5
-    thrust_pwm = thrust_pwm * thrust_pwm_max + thrust_pwm_min * 1.0
-    thrust_pwm = int(min(max(thrust_pwm_min, thrust_pwm), thrust_pwm_max * 0.95))
-
-    w_des = control['cmd_w']        # deg/s
-
-    # Publish command msg
-    self.send_ctbr_command(thrust_pwm, thrust_des_newtons, w_des[0], w_des[1], w_des[2])
+        if cf_name in self.scf_dict:
+            scf = self.scf_dict[cf_name]
+            scf.cf.commander.send_setpoint(roll_rate, pitch_rate, -yaw_rate, thrust_pwm)

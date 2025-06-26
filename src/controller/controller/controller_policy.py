@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 from scipy.spatial.transform import Rotation as R
 
+# import pygame
+
 class ScalarFiLM(nn.Module):
     def __init__(self, cond_dim, film_hidden_dims):
         super().__init__()
@@ -80,7 +82,7 @@ class RacingPolicy:
         # Warm-up network
         with torch.no_grad():
             dummy_obs = torch.zeros(self.obs_dim, dtype=torch.float32, device=self.device)
-            _ = self.model(dummy_obs)q
+            _ = self.model(dummy_obs)
 
         ######  Min/max values for scaling control outputs.
         rotor_speed_max = self.quadrotor['rotor_speed_max']
@@ -94,10 +96,22 @@ class RacingPolicy:
         self.max_roll_br = self.max_pitch_br = 100.0
         self.max_yaw_br = 200.0
 
-        self.idx_wp = 0
+        self.idx_wp = 3
 
         self.cond_twr = torch.tensor([1.8])
         self.cond_perc = torch.tensor([0.0])
+
+        # pygame.init()
+        # pygame.joystick.init()
+        # self.joystick = pygame.joystick.Joystick(0)
+        # self.joystick.init()
+        # print(f"Joystick connected: {self.joystick.get_name()}")
+        # self.axes_names = {
+        #     0: "Left Stick X",
+        #     1: "Left Stick Y",
+        #     3: "Right Stick X",
+        #     4: "Right Stick Y",
+        # }
 
     def update(self, state):
         """
@@ -170,13 +184,23 @@ class RacingPolicy:
         # print(actions)
         # print()
 
-        if self.scale_output:
-            u = 0.5 * (actions[0] + 1.0)
-            cmd_thrust = (1 - u) * self.min_thrust + u * self.max_thrust
+        # pygame.event.pump()
+        # def deadzone_general(x, threshold=0.03):
+        #     return 0.0 if abs(x) < threshold else x
 
-            roll_br  = actions[1] * self.max_roll_br
-            pitch_br = actions[2] * self.max_pitch_br
-            yaw_br   = actions[3] * self.max_yaw_br
+        # actions[0] = -self.joystick.get_axis(1)
+        # if actions[0] < -0.95:
+        #     actions[0] = -1.0
+
+        # actions[1] = deadzone_general(self.joystick.get_axis(3))
+        # actions[2] = deadzone_general(-self.joystick.get_axis(4))
+        # actions[3] = deadzone_general(-self.joystick.get_axis(0), threshold=0.1)
+
+        cmd_thrust = 0.5 * (actions[0] + 1.0)
+
+        roll_br  = actions[1] * self.max_roll_br
+        pitch_br = actions[2] * self.max_pitch_br
+        yaw_br   = actions[3] * self.max_yaw_br
 
         control_input = {'cmd_thrust': cmd_thrust,
                          'cmd_w': np.array([roll_br, pitch_br, yaw_br])}

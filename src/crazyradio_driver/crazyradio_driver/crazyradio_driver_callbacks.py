@@ -1,4 +1,5 @@
 from jirl_interfaces.msg import CommandCTBR, OdometryArray
+from jirl_interfaces.srv import Arm
 from cflib.utils import uri_helper
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
@@ -58,3 +59,24 @@ def reconnect_clbk(self):
                 self.scf_dict[crazyflie_name].param.set_value('locSrv.extQuatStdDev', 0.06)
             except Exception as e:
                 continue
+
+# Arm callback
+def arm_clbk(self, request, response):
+    crazyflie_name = request.crazyflie_name
+    command = request.command
+
+    if crazyflie_name not in self.scf_dict:
+        self.get_logger().error(f'Crazyflie {crazyflie_name} not found')
+        response.success = False
+        return response
+    if command == Arm.Request.ARM:
+        self.scf_dict[crazyflie_name].cf.platform.send_arming_request(True)
+    elif command == Arm.Request.DISARM:
+        self.scf_dict[crazyflie_name].cf.platform.send_arming_request(False)
+    else:
+        self.get_logger().error(f'Invalid command {command} for Crazyflie {crazyflie_name}')
+        response.success = False
+        return response
+    response.success = True
+    self.get_logger().info(f'Crazyflie {crazyflie_name} {"armed" if command == Arm.Request.ARM else "disarmed"}')
+    return response

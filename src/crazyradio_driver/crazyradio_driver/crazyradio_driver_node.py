@@ -2,6 +2,7 @@ from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from jirl_interfaces.msg import CommandCTBR, OdometryArray
+from jirl_interfaces.srv import Arm
 
 from cflib.utils import uri_helper
 
@@ -17,7 +18,7 @@ class CrazyradioDriverNode(Node):
 
     # Import methods
     from .crazyradio_driver_params import init_parameters
-    from .crazyradio_driver_callbacks import cmd_clbk, reconnect_clbk, mocap_clbk #, logger_clbk
+    from .crazyradio_driver_callbacks import cmd_clbk, reconnect_clbk, mocap_clbk, arm_clbk #, logger_clbk
 
     scf_dict = {}
 
@@ -29,6 +30,7 @@ class CrazyradioDriverNode(Node):
         self.init_callback_groups()
         #self.init_timers()
         self.init_subscriptions()
+        self.init_services()
 
         for crazyradio_uri, crazyflie_name in zip(self.crazyradio_uris, self.crazyflie_names):
             if crazyflie_name in self.scf_dict:
@@ -122,3 +124,14 @@ class CrazyradioDriverNode(Node):
             self.reconnect_clbk,
             callback_group=self.reconnect_cgroup
         )
+
+    def init_services(self):
+        """
+        Init services
+        """
+
+        # Arm or Disarm
+        self.arm_srv = self.create_service(
+            Arm,
+            '/arm',
+            self.arm_clbk)

@@ -4,6 +4,7 @@ from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Empty
 from std_srvs.srv import Trigger
 from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations, OdometryArray
 from jirl_interfaces.srv import UpdateSetpoint, StartTrajectory
@@ -27,7 +28,7 @@ class ControllerNode(Node):
 
     # Import methods
     from .controller_params import init_parameters
-    from .controller_callbacks import mocap_clbk, multi_mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk, race_clbk
+    from .controller_callbacks import mocap_clbk, multi_mocap_clbk, logger_clbk, update_setpoint_clbk, landing_clbk, takeoff_clbk, trajectory_clbk, race_clbk, stop_clbk
     from .controller_utils import send_ctbr_command, send_trajectory, single_update
 
     traj_lock = Lock()
@@ -97,7 +98,7 @@ class ControllerNode(Node):
         """
         Init controllers
         """
-        self.policy = RacingPolicy(crazyflie_params, self.policy_path, self.waypoints, self.waypoints_quat, self.gate_side, device=self.device)
+        self.policy = RacingPolicy(crazyflie_params, self.policy_path, self.waypoints, self.waypoints_quat, self.gate_side, self.initial_waypoint, device=self.device)
         self.se3_controller = SE3ControlCTBR(crazyflie_params)
 
     def init_callback_groups(self):
@@ -106,6 +107,7 @@ class ControllerNode(Node):
         """
         # Subscribers
         self.mocap_cgroup = MutuallyExclusiveCallbackGroup()
+        self.stop_cgroup = MutuallyExclusiveCallbackGroup()
 
         # Timers
         self.cmd_cgroup = MutuallyExclusiveCallbackGroup()
@@ -164,6 +166,14 @@ class ControllerNode(Node):
                 self.mocap_clbk,
                 qos_best_effort,
                 callback_group=self.mocap_cgroup
+            )
+
+        self.stop_sub = self.create_subscription(
+                Empty,
+                'stop',
+                self.stop_clbk,
+                qos_best_effort,
+                callback_group=self.stop_cgroup
             )
 
     def init_services(self):

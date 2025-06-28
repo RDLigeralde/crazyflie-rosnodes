@@ -2,6 +2,8 @@ import numpy as np
 import time
 
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Empty
+
 from jirl_interfaces.msg import OdometryArray
 from jirl_interfaces.srv import StartTrajectory
 
@@ -166,3 +168,14 @@ def multi_mocap_clbk(self, msg_array: OdometryArray):
         if cf_name in self.scf_dict:
             scf = self.scf_dict[cf_name]
             scf.cf.commander.send_setpoint(roll_rate, pitch_rate, -yaw_rate, thrust_pwm)
+
+
+def stop_clbk(self, _: Empty):
+    if self.fsm.state == 'hovering':
+        return
+
+    self.get_logger().info(f"[FSM] Drone is stopping...")
+    x0 = self.mocap_pose['x']
+    x0[2] = 0.5
+    self.fsm.stop()
+    self.flat_output = HoverTraj(x0=x0, yaw0=self.mocap_pose['yaw']).update(0)

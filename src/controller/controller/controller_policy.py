@@ -49,7 +49,7 @@ class FiLMActor(nn.Module):
         return x
 
 class RacingPolicy:
-    def __init__(self, vehicle, model_path, waypoints, waypoints_quat, gate_side, scale_output=True, device="cpu"):
+    def __init__(self, vehicle, model_path, waypoints, waypoints_quat, gate_side, initial_waypoint, scale_output=True, device="cpu"):
         self.quadrotor = vehicle
         self.device = torch.device(device)
         self.obs_dim = 3 + 9 + 12 + 12 + 2
@@ -89,14 +89,14 @@ class RacingPolicy:
         rotor_speed_min = self.quadrotor['rotor_speed_min']
 
         # Compute the min/max thrust by assuming the rotor is spinning at min/max speed.
-        self.max_thrust = self.quadrotor['num_rotors'] * self.quadrotor['k_eta'] * rotor_speed_max**2     # TODO
+        self.max_thrust = self.quadrotor['num_rotors'] * self.quadrotor['k_eta'] * rotor_speed_max**2 * 1.8 / 4.0    # TODO
         self.min_thrust = self.quadrotor['num_rotors'] * self.quadrotor['k_eta'] * rotor_speed_min**2
 
         # Set the maximum body rate on each axis (this is hand selected), rad/s
         self.max_roll_br = self.max_pitch_br = 100.0
         self.max_yaw_br = 200.0
 
-        self.idx_wp = 3
+        self.idx_wp = initial_waypoint
 
         self.cond_twr = torch.tensor([1.8])
         self.cond_perc = torch.tensor([0.0])

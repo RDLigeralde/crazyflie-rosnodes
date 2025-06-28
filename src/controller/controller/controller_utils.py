@@ -66,6 +66,10 @@ def single_update(self, msg: Odometry):
         obs_msg.cond = obs[36:38]
 
         self.obs_pub.publish(obs_msg)
+
+        thrust_des_perc = control['cmd_thrust']
+        thrust_des_newtons = thrust_des_perc * 0.575
+        thrust_pwm = int(self.low_level_controller_thrust_pwm_max * thrust_des_perc)
     else:
         if self.fsm.state == 'landed':
             return
@@ -110,23 +114,19 @@ def single_update(self, msg: Odometry):
         # Apply control
         control = self.se3_controller.update(0, self.mocap_pose, self.flat_output)
 
-    thrust_des_perc = control['cmd_thrust']
-    thrust_des_newtons = thrust_des_perc * 0.575
-    thrust_pwm = int(self.low_level_controller_thrust_pwm_max * thrust_des_perc)
+        c1 = self.low_level_controller_c1
+        c2 = self.low_level_controller_c2
+        c3 = self.low_level_controller_c3
+        thrust_pwm_min = self.low_level_controller_thrust_pwm_min
+        thrust_pwm_max = self.low_level_controller_thrust_pwm_max
 
-    # c1 = self.low_level_controller_c1
-    # c2 = self.low_level_controller_c2
-    # c3 = self.low_level_controller_c3
-    # thrust_pwm_min = self.low_level_controller_thrust_pwm_min
-    # thrust_pwm_max = self.low_level_controller_thrust_pwm_max
-
-    # thrust_des_newtons = control['cmd_thrust']
-    # thrust_des_grams = thrust_des_newtons / 9.81 * 1000
-    # if c3 + thrust_des_grams < 0:
-    #     thrust_des_grams = 0
-    # thrust_pwm = c1 + c2 * (c3 + thrust_des_grams)**.5
-    # thrust_pwm = thrust_pwm * thrust_pwm_max #+ thrust_pwm_min * 1.0
-    # thrust_pwm = int(min(max(thrust_pwm_min, thrust_pwm), thrust_pwm_max))
+        thrust_des_newtons = control['cmd_thrust']
+        thrust_des_grams = thrust_des_newtons / 9.81 * 1000
+        if c3 + thrust_des_grams < 0:
+            thrust_des_grams = 0
+        thrust_pwm = c1 + c2 * (c3 + thrust_des_grams)**.5
+        thrust_pwm = thrust_pwm * thrust_pwm_max + thrust_pwm_min * 1.0
+        thrust_pwm = int(min(max(thrust_pwm_min, thrust_pwm), thrust_pwm_max))
 
     w_des = control['cmd_w']        # deg/s
 

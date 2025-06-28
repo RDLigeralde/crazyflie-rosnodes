@@ -20,6 +20,7 @@ def init_parameters(self):
                     ('low_level_controller.thrust_pwm_max', 0),
                     ('policy.path', ''),
                     ('policy.waypoints', [0.0]),
+                    ('policy.initial_waypoint', 0),
                     ('takeoff_height', 0.5),
                    ])
 
@@ -38,6 +39,7 @@ def init_parameters(self):
     self.takeoff_height = self.get_parameter('takeoff_height').value
     waypoints_flat = np.array(self.get_parameter('policy.waypoints').value, dtype=np.float32)
     self.waypoints = waypoints_flat.reshape(-1, 6)
+    self.initial_waypoint = self.get_parameter('policy.initial_waypoint').value
 
     # Print parameters
     self.get_logger().info(f'crazyradio_enable: {self.driver_enable}')
@@ -53,6 +55,7 @@ def init_parameters(self):
     self.get_logger().info(f'thrust_pwm_max: {self.low_level_controller_thrust_pwm_max}')
     self.get_logger().info(f'policy_path: {self.policy_path}')
     self.get_logger().info(f'policy_waypoints:\n{self.waypoints}')
+    self.get_logger().info(f'initial_waypoint: {self.initial_waypoint}')
     self.get_logger().info(f'takeoff_height: {self.takeoff_height}')
 
     #

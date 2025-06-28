@@ -197,6 +197,7 @@
     "ddddot",
     "dddot",
     "ddot",
+    "deadzone",
     "dpos",
     "Eigen",
     "errmsg",

@@ -331,3 +331,13 @@ circle() {
   fi
   ros2 service call /$1/trajectory jirl_interfaces/srv/StartTrajectory "{trajectory_type: 0, radius: $2, freq: $3, duration: $4}"
 }
+
+stop() {
+  if [ -z "$1" ]; then
+    echo "Usage: stop <drone_name>"
+    return 1
+  fi
+
+  local topic="/$1/stop"
+  timeout 2 ros2 topic pub -r 10 "$topic" std_msgs/msg/Empty '{}'
+}

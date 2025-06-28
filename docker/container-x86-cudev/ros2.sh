@@ -341,3 +341,13 @@ stop() {
   local topic="/$1/stop"
   timeout 2 ros2 topic pub -r 10 "$topic" std_msgs/msg/Empty '{}'
 }
+
+arm() {
+    local cf_name=$1
+    ros2 service call /arm jirl_interfaces/srv/Arm "{crazyflie_name: ${cf_name}, command: 0}"
+}
+
+disarm() {
+    local cf_name=$1
+    ros2 service call /arm jirl_interfaces/srv/Arm "{crazyflie_name: ${cf_name}, command: 1}"
+}

@@ -289,12 +289,40 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
           gt_quat["y"].append(message.pose.pose.orientation.y)
           gt_quat["z"].append(message.pose.pose.orientation.z)
           gt_quat["w"].append(message.pose.pose.orientation.w)
-          gt_lin_vel["x"].append(message.twist.twist.linear.x)
-          gt_lin_vel["y"].append(message.twist.twist.linear.y)
-          gt_lin_vel["z"].append(message.twist.twist.linear.z)
-          gt_ang_vel["x"].append(-message.twist.twist.angular.x * 180.0 / np.pi)
-          gt_ang_vel["y"].append(-message.twist.twist.angular.y * 180.0 / np.pi)
-          gt_ang_vel["z"].append(message.twist.twist.angular.z * 180.0 / np.pi)
+
+          quat = [
+            message.pose.pose.orientation.x,
+            message.pose.pose.orientation.y,
+            message.pose.pose.orientation.z,
+            message.pose.pose.orientation.w
+          ]
+          rot = R.from_quat(quat)
+          rot_T = rot.as_matrix().T
+
+          lin_vel_world = np.array([
+            message.twist.twist.linear.x,
+            message.twist.twist.linear.y,
+            message.twist.twist.linear.z
+          ])
+          ang_vel_world = np.array([
+            message.twist.twist.angular.x,
+            message.twist.twist.angular.y,
+            message.twist.twist.angular.z
+          ])
+
+          lin_vel_body = rot_T @ lin_vel_world
+          ang_vel_body = rot_T @ ang_vel_world * 180.0 / np.pi
+
+          gt_lin_vel["x"].append(lin_vel_body[0])
+          gt_lin_vel["y"].append(lin_vel_body[1])
+          gt_lin_vel["z"].append(lin_vel_body[2])
+          gt_ang_vel["x"].append(ang_vel_body[0])
+          gt_ang_vel["y"].append(ang_vel_body[1])
+          gt_ang_vel["z"].append(ang_vel_body[2])
+
+
+
+
         elif normalized_topic == cmd_topic:
            # Check if message has crazyflie_name (assuming specific message type)
            # Make the check more robust in case the attribute doesn't exist
@@ -691,9 +719,7 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
 
   square_color = 'cyan'
   square_alpha = 0.3
-
   for square in verts_all:
-      # square è (4, 3): una lista di vertici
       poly = Poly3DCollection([square], color=square_color, alpha=square_alpha, edgecolor='k')
       ax3d.add_collection3d(poly)
 
@@ -739,48 +765,73 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
              print(f"Warning: Skipping rotation due to invalid Euler angles for SciPy: roll={roll}, pitch={pitch}, yaw={yaw} ({e})")
              return points # Return original points if rotation fails
 
+      frame_idx = 0
 
-      def update_animation(num):
-        # Get data for the current frame index 'num'
-        x, y, z = gt_pos["x"][num], gt_pos["y"][num], gt_pos["z"][num]
-        roll, pitch, yaw = gt_euler["roll"][num], gt_euler["pitch"][num], gt_euler["yaw"][num]
+      def update_animation(_):
+        nonlocal paused, frame_idx, drone_quiver
 
-        # Define drone body frame axes representation
-        # Make representation smaller relative to potential trajectory scale
+        if paused or frame_idx >= len(timestamps):
+            return drone_x, drone_y, trail, current_pos_marker, drone_quiver
+
+        x = gt_pos["x"][frame_idx]
+        y = gt_pos["y"][frame_idx]
+        z = gt_pos["z"][frame_idx]
+        roll = gt_euler["roll"][frame_idx]
+        pitch = gt_euler["pitch"][frame_idx]
+        yaw = gt_euler["yaw"][frame_idx]
+
         drone_size = 0.1
         base_points = np.array([
             [-drone_size, -drone_size, 0], [drone_size, drone_size, 0],
             [-drone_size, drone_size, 0], [drone_size, -drone_size, 0]
         ])
-
         rotated_points = rotate_points(base_points, roll, pitch, yaw)
 
-        # Update drone 'X' axis lines in world frame
-        drone_x.set_data([x + rotated_points[0, 0], x + rotated_points[1, 0]],
-                         [y + rotated_points[0, 1], y + rotated_points[1, 1]])
-        drone_x.set_3d_properties([z + rotated_points[0, 2], z + rotated_points[1, 2]])
+        drone_x.set_data(
+            [x + rotated_points[0, 0], x + rotated_points[1, 0]],
+            [y + rotated_points[0, 1], y + rotated_points[1, 1]]
+        )
+        drone_x.set_3d_properties(
+            [z + rotated_points[0, 2], z + rotated_points[1, 2]]
+        )
 
-        # Update drone 'Y' axis lines in world frame
-        drone_y.set_data([x + rotated_points[2, 0], x + rotated_points[3, 0]],
-                         [y + rotated_points[2, 1], y + rotated_points[3, 1]])
-        drone_y.set_3d_properties([z + rotated_points[2, 2], z + rotated_points[3, 2]])
+        drone_y.set_data(
+            [x + rotated_points[2, 0], x + rotated_points[3, 0]],
+            [y + rotated_points[2, 1], y + rotated_points[3, 1]]
+        )
+        drone_y.set_3d_properties(
+            [z + rotated_points[2, 2], z + rotated_points[3, 2]]
+        )
 
-        # Update trail (plot data up to current frame 'num')
-        trail.set_data(gt_pos["x"][:num+1], gt_pos["y"][:num+1])
-        trail.set_3d_properties(gt_pos["z"][:num+1])
+        trail.set_data(gt_pos["x"][:frame_idx + 1], gt_pos["y"][:frame_idx + 1])
+        trail.set_3d_properties(gt_pos["z"][:frame_idx + 1])
 
-        # Update the 'current position' marker
         current_pos_marker.set_data([x], [y])
         current_pos_marker.set_3d_properties([z])
 
-        # Update title with time
-        anim_ax.set_title(f"Drone Trajectory Animation ({namespace}) - Time: {timestamps[num]:.2f}s")
+        x_dir_body = rotate_points(np.array([[0.2, 0, 0]]), roll, pitch, yaw)[0]
+        drone_quiver.remove()
+        drone_quiver = anim_ax.quiver(
+            x, y, z,
+            x_dir_body[0], x_dir_body[1], x_dir_body[2],
+            color='red', length=0.2, normalize=True
+        )
 
-        # Return tuple of artists that were modified
-        return drone_x, drone_y, trail, current_pos_marker
+        anim_ax.set_title(f"Drone Trajectory Animation ({namespace}) - Time: {timestamps[frame_idx]:.2f}s")
+
+        frame_idx += 1
+        return drone_x, drone_y, trail, current_pos_marker, drone_quiver
+
 
       # --- Set up Animation Plot ---
       anim_fig = plt.figure(figsize=figsize)
+      def on_key(event):
+        nonlocal paused
+        if event.key == ' ':
+          paused = not paused
+          print("Paused" if paused else "Resumed")
+      anim_fig.canvas.mpl_connect('key_press_event', on_key)
+
       anim_ax = anim_fig.add_subplot(111, projection='3d')
 
       # Determine axis limits from the *entire* dataset (actual and desired if present)
@@ -837,11 +888,17 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
       # Initialize animated elements (lines/markers)
       # Trail will grow, others will move/rotate
       trail, = anim_ax.plot([], [], [], 'b-', linewidth=1.5, label="Actual Trail") # Growing trail
-      drone_x, = anim_ax.plot([], [], [], 'r-', linewidth=2, label='Drone X-axis') # Drone X marker
-      drone_y, = anim_ax.plot([], [], [], 'g-', linewidth=2, label='Drone Y-axis') # Drone Y marker
+      drone_x, = anim_ax.plot([], [], [], 'r-', linewidth=3) # Drone X marker
+      drone_y, = anim_ax.plot([], [], [], 'g-', linewidth=3) # Drone Y marker
       current_pos_marker, = anim_ax.plot([], [], [], 'ko', markersize=4, label='Current Pos') # Current position dot
-
+      drone_quiver = anim_ax.quiver(0, 0, 0, 0, 0, 0, color='red', length=0.2)
       anim_ax.legend(fontsize='small')
+
+      square_color = 'cyan'
+      square_alpha = 0.3
+      for square in verts_all:
+        poly = Poly3DCollection([square], color=square_color, alpha=square_alpha, edgecolor='k')
+        anim_ax.add_collection3d(poly)
 
       # --- Calculate Animation Timing ---
       if len(timestamps) > 1:
@@ -860,23 +917,16 @@ def analyze_ros2_bag(bag_path, namespace, t0=0, tf=float('inf')):
 
       num_frames = len(timestamps)
 
-      # Create the animation object
-      # blit=False is generally recommended for 3D plots or complex updates
-      ani = animation.FuncAnimation(anim_fig, update_animation, frames=num_frames,
-                                    interval=interval_ms, blit=False)
+      paused = False
 
-      # --- Save Animation ---
-      # anim_filename = output_plot_dir / f"{namespace}_trajectory_animation.gif"
-      # print(f"Saving animation to {anim_filename} (this may take a while)...")
-      # try:
-      #     # Use 'pillow' writer for GIF. Adjust dpi for quality/size trade-off.
-      #     ani.save(str(anim_filename), writer='pillow', fps=fps, dpi=100)
-      #     print("Animation saved successfully.")
-      # except Exception as e:
-      #     print(f"Error saving animation: {e}")
-      #     print("Ensure Pillow is installed ('pip install Pillow').")
-      #     print("If issues persist, try installing FFmpeg ('sudo apt install ffmpeg' or equivalent).")
-      #     print("You might need to specify a different writer, e.g., writer='ffmpeg'.")
+      # Create the animation object
+      _ = animation.FuncAnimation(
+          anim_fig,
+          update_animation,
+          frames=range(num_frames),
+          interval=interval_ms,
+          blit=False
+      )
 
   # --- Show plots interactively at the end ---
   print("\nDisplaying plots...")

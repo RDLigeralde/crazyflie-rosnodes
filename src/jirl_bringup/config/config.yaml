@@ -4,11 +4,11 @@
     crazyradio_driver:
       enable: False
       crazyflie_names:
-        - crazy_jirl_bl
-        - crazy_jirl_bl2
+        - crazy_jirl_b1
+        - crazy_jirl_b2
       crazyradio_uris:
-        - radio://0/80/2M/E7E7E7E7B1
-        - radio://0/80/2M/E7E7E7E7B3
+        - radio://0/80/2M/E7E7E701B1
+        - radio://0/80/2M/E7E7E701B2
       ext_driver: py   # cpp or python
     gate_side: 1.0
     low_level_controller:
@@ -35,11 +35,11 @@
 /crazyradio_driver:
   ros__parameters:
     crazyflie_names:
-      - crazy_jirl_bl
-      - crazy_jirl_bl2
+      - crazy_jirl_b1
+      - crazy_jirl_b2
     crazyradio_uris:
-      - radio://0/80/2M/E7E7E7E7B1
-      - radio://0/80/2M/E7E7E7E7B3
+      - radio://0/80/2M/E7E7E707B1
+      - radio://0/80/2M/E7E7E707B2
     logger_period_ms: 1000
     reconnection_period_ms: 2000
 
@@ -55,5 +55,5 @@
     timer_single_pub_freq: 100
     timer_multi_pub_freq: 100
     model_list:
-      - crazy_jirl_bl
-      - crazy_jirl_bl2
+      - crazy_jirl_b1
+      - crazy_jirl_b2

@@ -2,8 +2,12 @@
 /crazy_jirl_b1/pose
 /crazy_jirl_b1/trajectory
 /crazy_jirl_b1/ctbr_cmd
+/crazy_jirl_b1/observations
 /crazy_jirl_b2/odom
 /crazy_jirl_b2/pose
 /crazy_jirl_b2/trajectory
 /crazy_jirl_b2/ctbr_cmd
+/crazy_jirl_b2/observations
+/ctbr_cmd
+/multi_odometry
 /tf

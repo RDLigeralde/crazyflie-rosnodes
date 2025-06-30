@@ -8,7 +8,7 @@
         - crazy_jirl_b2
       crazyradio_uris:
         - radio://0/80/2M/E7E7E701B1
-        - radio://0/80/2M/E7E7E701B2
+        - radio://0/83/2M/E7E7E701B2
       ext_driver: py   # cpp or python
     gate_side: 1.0
     low_level_controller:
@@ -16,12 +16,19 @@
       c2: 0.1932
       c3: 13.0652
       thrust_pwm_min: 10001
-      thrust_pwm_max: 50000
+      thrust_pwm_max: 60000
     policy:
-      # path: /home/neo/workspace/logs/policies/2025-06-18_15-28-43/model_3200_13022.pt   # half working
-      # path: /home/neo/workspace/logs/policies/2025-06-20_15-19-30/model_750_8215.pt
-      path: /home/neo/workspace/logs/policies/2025-06-21_19-31-24/best_model.pt
-      # path: /home/neo/workspace/logs/policies/2025-06-27_00-31-59/best_model.pt
+      # path: /home/neo/workspace/logs/policies/2025-06-21_19-31-24/best_model.pt     # 35 laps
+      # path: /home/neo/workspace/logs/policies/2025-06-30_13-59-12/best_model.pt     # 180 degree fixed yaw
+      path: /home/neo/workspace/logs/policies/2025-06-29_17-32-06/best_model.pt     # 90 degree fixed yaw (elliptical traj)
+      # path: /home/neo/workspace/logs/policies/2025-06-30_14-02-19/best_model.pt     # 90 degree no roll and pitch restrictions
+      # path: /home/neo/workspace/logs/policies/2025-06-30_18-05-01/best_model.pt     # 0 degree no roll and pitch restrictions
+
+
+      max_pitch_br: 100.0
+      max_roll_br: 100.0
+      max_yaw_br: 200.0
+
       waypoints: [
          0.0, 3.0, 0.75, 0.0, 0.0,  0.0,
         -1.5, 4.5, 0.75, 0.0, 0.0, -1.57,
@@ -38,8 +45,8 @@
       - crazy_jirl_b1
       - crazy_jirl_b2
     crazyradio_uris:
-      - radio://0/80/2M/E7E7E707B1
-      - radio://0/80/2M/E7E7E707B2
+      - radio://0/80/2M/E7E7E701B1
+      - radio://0/83/2M/E7E7E701B2
     logger_period_ms: 1000
     reconnection_period_ms: 2000
 

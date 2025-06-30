@@ -55,6 +55,9 @@ def single_update(self, msg: Odometry):
     self.mocap_pose['v_w'] = v_w
     self.mocap_pose['w_w'] = w_w
 
+    thrust_pwm_min = self.low_level_controller_thrust_pwm_min
+    thrust_pwm_max = self.low_level_controller_thrust_pwm_max
+
     if self.fsm.state == 'racing':
         control, obs = self.policy.update(self.mocap_pose)
 
@@ -68,8 +71,9 @@ def single_update(self, msg: Odometry):
         self.obs_pub.publish(obs_msg)
 
         thrust_des_perc = control['cmd_thrust']
-        thrust_des_newtons = thrust_des_perc * 0.575
-        thrust_pwm = int(self.low_level_controller_thrust_pwm_max * thrust_des_perc)
+        thrust_pwm = int(thrust_pwm_min + thrust_des_perc * (thrust_pwm_max - thrust_pwm_min))
+
+        thrust_des_newtons = thrust_des_perc * (0.038 * 9.81 * 3.15)
     else:
         if self.fsm.state == 'landed':
             return
@@ -117,8 +121,6 @@ def single_update(self, msg: Odometry):
         c1 = self.low_level_controller_c1
         c2 = self.low_level_controller_c2
         c3 = self.low_level_controller_c3
-        thrust_pwm_min = self.low_level_controller_thrust_pwm_min
-        thrust_pwm_max = self.low_level_controller_thrust_pwm_max
 
         thrust_des_newtons = control['cmd_thrust']
         thrust_des_grams = thrust_des_newtons / 9.81 * 1000

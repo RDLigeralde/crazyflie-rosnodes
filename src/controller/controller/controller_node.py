@@ -98,7 +98,7 @@ class ControllerNode(Node):
         """
         Init controllers
         """
-        self.policy = RacingPolicy(crazyflie_params, self.policy_path, self.waypoints, self.waypoints_quat, self.gate_side, self.initial_waypoint, device=self.device)
+        self.policy = RacingPolicy(crazyflie_params, self.policy_path, self.params, device=self.device)
         self.se3_controller = SE3ControlCTBR(crazyflie_params)
 
     def init_callback_groups(self):

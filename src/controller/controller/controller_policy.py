@@ -49,20 +49,18 @@ class FiLMActor(nn.Module):
         return x
 
 class RacingPolicy:
-    def __init__(self, vehicle, model_path, waypoints, waypoints_quat, gate_side, initial_waypoint, scale_output=True, device="cpu"):
+    def __init__(self, vehicle, model_path, params, device="cpu"):
         self.quadrotor = vehicle
         self.device = torch.device(device)
         self.obs_dim = 3 + 9 + 12 + 12 + 2
 
         self.action_dim = 4
 
-        self.scale_output = scale_output
+        self.waypoints = params["waypoints"]
+        self.waypoints_quat = params["waypoints_quat"]
 
-        self.waypoints = waypoints
-        self.waypoints_quat = waypoints_quat
-
-        self.gate_side = gate_side
-        d = gate_side / 2
+        self.gate_side = params["gate_side"]
+        d = self.gate_side / 2
         self.local_square = np.array([
             [0,  d,  d],
             [0, -d,  d],
@@ -84,22 +82,15 @@ class RacingPolicy:
             dummy_obs = torch.zeros(self.obs_dim, dtype=torch.float32, device=self.device)
             _ = self.model(dummy_obs)
 
-        ######  Min/max values for scaling control outputs.
-        rotor_speed_max = self.quadrotor['rotor_speed_max']
-        rotor_speed_min = self.quadrotor['rotor_speed_min']
+        self.idx_wp = params["initial_waypoint"]
 
-        # Compute the min/max thrust by assuming the rotor is spinning at min/max speed.
-        self.max_thrust = self.quadrotor['num_rotors'] * self.quadrotor['k_eta'] * rotor_speed_max**2 * 1.8 / 4.0    # TODO
-        self.min_thrust = self.quadrotor['num_rotors'] * self.quadrotor['k_eta'] * rotor_speed_min**2
+        self.cond_twr = torch.tensor([3.15])
+        self.cond_perc = torch.tensor([0.0])
 
         # Set the maximum body rate on each axis (this is hand selected), rad/s
-        self.max_roll_br = self.max_pitch_br = 100.0
-        self.max_yaw_br = 200.0
-
-        self.idx_wp = initial_waypoint
-
-        self.cond_twr = torch.tensor([1.8])
-        self.cond_perc = torch.tensor([0.0])
+        self.max_roll_br = params["max_roll_br"]
+        self.max_pitch_br = params["max_pitch_br"]
+        self.max_yaw_br = params["max_yaw_br"]
 
         # pygame.init()
         # pygame.joystick.init()

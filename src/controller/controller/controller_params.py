@@ -21,7 +21,10 @@ def init_parameters(self):
                     ('policy.path', ''),
                     ('policy.waypoints', [0.0]),
                     ('policy.initial_waypoint', 0),
-                    ('takeoff_height', 0.5),
+                    ('takeoff_height', 0.0),
+                    ('policy.max_roll_br', 0.0),
+                    ('policy.max_pitch_br', 0.0),
+                    ('policy.max_yaw_br', 0.0)
                    ])
 
     # Get parameters
@@ -36,6 +39,9 @@ def init_parameters(self):
     self.low_level_controller_thrust_pwm_min = self.get_parameter('low_level_controller.thrust_pwm_min').value
     self.low_level_controller_thrust_pwm_max = self.get_parameter('low_level_controller.thrust_pwm_max').value
     self.policy_path = self.get_parameter('policy.path').value
+    self.policy_max_roll_br = self.get_parameter('policy.max_roll_br').value
+    self.policy_max_pitch_br = self.get_parameter('policy.max_pitch_br').value
+    self.policy_max_yaw_br = self.get_parameter('policy.max_yaw_br').value
     self.takeoff_height = self.get_parameter('takeoff_height').value
     waypoints_flat = np.array(self.get_parameter('policy.waypoints').value, dtype=np.float32)
     self.waypoints = waypoints_flat.reshape(-1, 6)
@@ -55,11 +61,23 @@ def init_parameters(self):
     self.get_logger().info(f'thrust_pwm_max: {self.low_level_controller_thrust_pwm_max}')
     self.get_logger().info(f'policy_path: {self.policy_path}')
     self.get_logger().info(f'policy_waypoints:\n{self.waypoints}')
+    self.get_logger().info(f'policy_max_roll_br: {self.policy_max_roll_br}')
+    self.get_logger().info(f'policy_max_pitch_br: {self.policy_max_pitch_br}')
+    self.get_logger().info(f'policy_max_yaw_br: {self.policy_max_yaw_br}')
     self.get_logger().info(f'initial_waypoint: {self.initial_waypoint}')
     self.get_logger().info(f'takeoff_height: {self.takeoff_height}')
 
     #
     self.waypoints_quat = np.zeros((self.waypoints.shape[0], 4), dtype=np.float32)
+    self.params = {
+        "waypoints": self.waypoints,
+        "waypoints_quat": self.waypoints_quat,
+        "gate_side": self.gate_side,
+        "initial_waypoint": self.initial_waypoint,
+        "max_roll_br": self.policy_max_roll_br,
+        "max_pitch_br": self.policy_max_pitch_br,
+        "max_yaw_br": self.policy_max_yaw_br
+    }
 
     for i, waypoint_data in enumerate(self.waypoints):
         euler_np = waypoint_data[3:6]

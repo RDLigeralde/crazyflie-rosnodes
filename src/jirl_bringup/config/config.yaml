@@ -20,9 +20,14 @@
     policy:
       # path: /home/neo/workspace/logs/policies/2025-06-21_19-31-24/best_model.pt     # 35 laps
       # path: /home/neo/workspace/logs/policies/2025-06-30_13-59-12/best_model.pt     # 180 degree fixed yaw
-      path: /home/neo/workspace/logs/policies/2025-06-29_17-32-06/best_model.pt     # 90 degree fixed yaw (elliptical traj)
+      # path: /home/neo/workspace/logs/policies/2025-06-29_17-32-06/best_model.pt     # 90 degree fixed yaw (elliptical traj)
       # path: /home/neo/workspace/logs/policies/2025-06-30_14-02-19/best_model.pt     # 90 degree no roll and pitch restrictions
       # path: /home/neo/workspace/logs/policies/2025-06-30_18-05-01/best_model.pt     # 0 degree no roll and pitch restrictions
+      # path: /home/neo/workspace/logs/policies/2025-06-18_15-28-43/model_3200_13022.pt # policy for Vineet's current multi-agent code for the fixed adversary
+      # path: /home/neo/workspace/logs/policies/2025-07-17_15-59-05/best_model.pt     # yaw_des = pi, different perception reward computation
+      # path: /home/neo/workspace/logs/policies/2025-07-17_16-04-28/best_model.pt     # yaw not fixed, just the new perception reward computation
+      # path: /home/neo/workspace/logs/policies/2025-07-23_14-56-35/model_1700_19876.pt # increased yaw rate reward from -50 to -500 to discourage large yaw rates
+      path: /home/neo/workspace/logs/policies/2025-07-23_17-48-08/best_model.pt     # increased yaw rate reward from -50 to -500 to discourage large yaw rates, domain randomization on tau_m motor coeffs
 
 
       max_pitch_br: 100.0

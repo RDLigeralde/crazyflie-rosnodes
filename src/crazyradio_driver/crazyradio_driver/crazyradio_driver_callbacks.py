@@ -71,6 +71,7 @@ def arm_clbk(self, request, response):
         return response
     if command == Arm.Request.ARM:
         self.scf_dict[crazyflie_name].cf.platform.send_arming_request(True)
+        self.scf_dict[crazyflie_name].cf.param.set_value('usd.logging', '1')
     elif command == Arm.Request.DISARM:
         self.scf_dict[crazyflie_name].cf.platform.send_arming_request(False)
         self.scf_dict[crazyflie_name].cf.param.set_value('usd.logging', '0')

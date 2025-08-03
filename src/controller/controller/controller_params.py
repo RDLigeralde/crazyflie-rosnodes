@@ -21,10 +21,11 @@ def init_parameters(self):
                     ('policy.path', ''),
                     ('policy.waypoints', [0.0]),
                     ('policy.initial_waypoint', 0),
-                    ('takeoff_height', 0.0),
                     ('policy.max_roll_br', 0.0),
                     ('policy.max_pitch_br', 0.0),
-                    ('policy.max_yaw_br', 0.0)
+                    ('policy.max_yaw_br', 0.0),
+                    ('policy.pass_gate_thr', 0.0),
+                    ('takeoff_height', 0.0),
                    ])
 
     # Get parameters
@@ -42,6 +43,7 @@ def init_parameters(self):
     self.policy_max_roll_br = self.get_parameter('policy.max_roll_br').value
     self.policy_max_pitch_br = self.get_parameter('policy.max_pitch_br').value
     self.policy_max_yaw_br = self.get_parameter('policy.max_yaw_br').value
+    self.policy_pass_gate_thr = self.get_parameter('policy.pass_gate_thr').value
     self.takeoff_height = self.get_parameter('takeoff_height').value
     waypoints_flat = np.array(self.get_parameter('policy.waypoints').value, dtype=np.float32)
     self.waypoints = waypoints_flat.reshape(-1, 6)
@@ -64,6 +66,7 @@ def init_parameters(self):
     self.get_logger().info(f'policy_max_roll_br: {self.policy_max_roll_br}')
     self.get_logger().info(f'policy_max_pitch_br: {self.policy_max_pitch_br}')
     self.get_logger().info(f'policy_max_yaw_br: {self.policy_max_yaw_br}')
+    self.get_logger().info(f'policy_pass_gate_thr: {self.policy_pass_gate_thr}')
     self.get_logger().info(f'initial_waypoint: {self.initial_waypoint}')
     self.get_logger().info(f'takeoff_height: {self.takeoff_height}')
 
@@ -76,7 +79,8 @@ def init_parameters(self):
         "initial_waypoint": self.initial_waypoint,
         "max_roll_br": self.policy_max_roll_br,
         "max_pitch_br": self.policy_max_pitch_br,
-        "max_yaw_br": self.policy_max_yaw_br
+        "max_yaw_br": self.policy_max_yaw_br,
+        "pass_gate_thr": self.policy_pass_gate_thr
     }
 
     for i, waypoint_data in enumerate(self.waypoints):

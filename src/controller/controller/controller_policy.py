@@ -91,6 +91,7 @@ class RacingPolicy:
         self.max_roll_br = params["max_roll_br"]
         self.max_pitch_br = params["max_pitch_br"]
         self.max_yaw_br = params["max_yaw_br"]
+        self.pass_gate_thr = params["pass_gate_thr"]
 
         # pygame.init()
         # pygame.joystick.init()
@@ -128,7 +129,7 @@ class RacingPolicy:
         rot_next = R.from_quat(quat_next, scalar_first=True).as_matrix()
 
         pose_drone_wrt_gate = self._subtract_frame_transforms(wp_curr_pos, rot_curr, pos_drone)
-        if np.linalg.norm(pose_drone_wrt_gate) < self.gate_side and pose_drone_wrt_gate[0] < 0.10:
+        if np.linalg.norm(pose_drone_wrt_gate) < self.gate_side and pose_drone_wrt_gate[0] < self.pass_gate_thr:
             self.idx_wp = (self.idx_wp + 1) % self.waypoints.shape[0]
 
         verts_curr = self.local_square @ rot_curr.T + wp_curr_pos

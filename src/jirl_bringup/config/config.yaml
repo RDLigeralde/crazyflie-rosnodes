@@ -45,6 +45,8 @@
       initial_waypoint: 0
     takeoff_height: 0.5
 
+    use_cond: False
+
 # Crazyradio driver
 /crazyradio_driver:
   ros__parameters:

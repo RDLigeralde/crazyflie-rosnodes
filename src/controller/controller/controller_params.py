@@ -26,6 +26,7 @@ def init_parameters(self):
                     ('policy.max_yaw_br', 0.0),
                     ('policy.pass_gate_thr', 0.0),
                     ('takeoff_height', 0.0),
+                    ('use_cond', True),
                    ])
 
     # Get parameters
@@ -48,6 +49,7 @@ def init_parameters(self):
     waypoints_flat = np.array(self.get_parameter('policy.waypoints').value, dtype=np.float32)
     self.waypoints = waypoints_flat.reshape(-1, 6)
     self.initial_waypoint = self.get_parameter('policy.initial_waypoint').value
+    self.use_cond = self.get_parameter('use_cond').value
 
     # Print parameters
     self.get_logger().info(f'crazyradio_enable: {self.driver_enable}')
@@ -69,6 +71,7 @@ def init_parameters(self):
     self.get_logger().info(f'policy_pass_gate_thr: {self.policy_pass_gate_thr}')
     self.get_logger().info(f'initial_waypoint: {self.initial_waypoint}')
     self.get_logger().info(f'takeoff_height: {self.takeoff_height}')
+    self.get_logger().info(f'use_cond: {self.use_cond}')
 
     #
     self.waypoints_quat = np.zeros((self.waypoints.shape[0], 4), dtype=np.float32)

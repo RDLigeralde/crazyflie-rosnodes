@@ -48,11 +48,30 @@ class FiLMActor(nn.Module):
         x = self.tanh(self.actor.output_layer(x))
         return x
 
+class Actor(nn.Module):
+    def __init__(self, mlp_input_dim, actor_hidden_dims, num_actions, activation):
+        super(Actor, self).__init__()
+
+        actor_layers = []
+        actor_layers.append(nn.Linear(mlp_input_dim, actor_hidden_dims[0]))
+        actor_layers.append(activation())
+        for layer_index in range(len(actor_hidden_dims)):
+            if layer_index == len(actor_hidden_dims) - 1:
+                actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], num_actions))
+                actor_layers.append(nn.Tanh())
+            else:
+                actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], actor_hidden_dims[layer_index + 1]))
+                actor_layers.append(activation())
+        self.actor = nn.Sequential(*actor_layers)
+
+    def forward(self, x):
+        return self.actor(x)
+
 class RacingPolicy:
-    def __init__(self, vehicle, model_path, params, device="cpu"):
+    def __init__(self, vehicle, model_path, params, device="cpu", use_cond=False):
         self.quadrotor = vehicle
         self.device = torch.device(device)
-        self.obs_dim = 3 + 9 + 12 + 12 + 2
+        self.obs_dim = 3 + 9 + 12 + 12 + (2 if use_cond else 0)
 
         self.action_dim = 4
 
@@ -69,7 +88,12 @@ class RacingPolicy:
         ], dtype=np.float32)
 
         # Create network
-        self.model = FiLMActor(self.obs_dim, [128, 128], self.action_dim, 2, [3, 3], nn.ELU).to(self.device)
+        if use_cond:
+            self.model = FiLMActor(self.obs_dim, [128, 128], self.action_dim, 2, [3, 3], nn.ELU).to(self.device)
+            self.cond_twr = torch.tensor([3.15])
+            self.cond_perc = torch.tensor([0.0])
+        else:
+            self.model = Actor(self.obs_dim, [128, 128], self.action_dim, nn.ELU).to(self.device)
         checkpoint = torch.load(model_path, map_location=self.device)
         # Load checkpoint
         actor_state_dict = {k: v for k, v in checkpoint["model_state_dict"].items() if "actor" in k}
@@ -84,8 +108,6 @@ class RacingPolicy:
 
         self.idx_wp = params["initial_waypoint"]
 
-        self.cond_twr = torch.tensor([3.15])
-        self.cond_perc = torch.tensor([0.0])
 
         # Set the maximum body rate on each axis (this is hand selected), rad/s
         self.max_roll_br = params["max_roll_br"]
@@ -138,17 +160,16 @@ class RacingPolicy:
         waypoint_pos_b_curr = self._subtract_frame_transforms(pos_drone, rot_drone, verts_curr).reshape(4, 3)
         waypoint_pos_b_next = self._subtract_frame_transforms(pos_drone, rot_drone, verts_next).reshape(4, 3)
 
-        obs = torch.cat(
-            [
-                torch.from_numpy(lin_vel_drone).flatten(),
-                torch.from_numpy(rot_drone).flatten(),
-                torch.from_numpy(waypoint_pos_b_curr).flatten(),
-                torch.from_numpy(waypoint_pos_b_next).flatten(),
-                self.cond_twr.flatten(),
-                self.cond_perc.flatten()
-            ],
-            dim=-1
-        ).to(dtype=torch.float32, device=self.device)
+        obs = [
+            torch.from_numpy(lin_vel_drone).flatten(),
+            torch.from_numpy(rot_drone).flatten(),
+            torch.from_numpy(waypoint_pos_b_curr).flatten(),
+            torch.from_numpy(waypoint_pos_b_next).flatten(),
+        ]
+
+        if self.use_cond:
+            obs.append(self.cond_twr.flatten())
+            obs.append(self.cond_perc.flatten())
 
         with torch.no_grad():
             actions = self.model(obs).squeeze(0).cpu().numpy()

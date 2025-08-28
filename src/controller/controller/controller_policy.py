@@ -71,6 +71,7 @@ class RacingPolicy:
     def __init__(self, vehicle, model_path, params, device="cpu", use_cond=False):
         self.quadrotor = vehicle
         self.device = torch.device(device)
+        self.use_cond = use_cond
         self.obs_dim = 3 + 9 + 12 + 12 + (2 if use_cond else 0)
 
         self.action_dim = 4
@@ -161,15 +162,17 @@ class RacingPolicy:
         waypoint_pos_b_next = self._subtract_frame_transforms(pos_drone, rot_drone, verts_next).reshape(4, 3)
 
         obs = [
-            torch.from_numpy(lin_vel_drone).flatten(),
-            torch.from_numpy(rot_drone).flatten(),
-            torch.from_numpy(waypoint_pos_b_curr).flatten(),
-            torch.from_numpy(waypoint_pos_b_next).flatten(),
+            torch.from_numpy(lin_vel_drone).float().flatten(),
+            torch.from_numpy(rot_drone).float().flatten(),
+            torch.from_numpy(waypoint_pos_b_curr).float().flatten(),
+            torch.from_numpy(waypoint_pos_b_next).float().flatten(),
         ]
 
         if self.use_cond:
             obs.append(self.cond_twr.flatten())
             obs.append(self.cond_perc.flatten())
+
+        obs = torch.cat(obs).float().to(self.device)
 
         with torch.no_grad():
             actions = self.model(obs).squeeze(0).cpu().numpy()

@@ -62,7 +62,7 @@
 # Vicon
 /vicon_node:
   ros__parameters:
-    server_address: mocap.perch
+    server_address: 192.168.8.2  #mocap.perch
     frame_rate: 120
     max_accel: 10.0
     publish_tf: true

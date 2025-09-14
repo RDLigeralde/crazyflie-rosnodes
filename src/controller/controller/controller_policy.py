@@ -94,7 +94,7 @@ class RacingPolicy:
             self.cond_twr = torch.tensor([3.15])
             self.cond_perc = torch.tensor([0.0])
         else:
-            self.model = Actor(self.obs_dim, [128, 128], self.action_dim, nn.ELU).to(self.device)
+            self.model = Actor(self.obs_dim, [512, 512, 256, 128], self.action_dim, nn.ELU).to(self.device)
         checkpoint = torch.load(model_path, map_location=self.device)
         # Load checkpoint
         actor_state_dict = {k: v for k, v in checkpoint["model_state_dict"].items() if "actor" in k}

@@ -4,6 +4,7 @@ install/*
 log/*
 
 cache/*
+__pycache__/
 
 # Uncomment the following to avoid pushing personal configurations
 # .vscode/

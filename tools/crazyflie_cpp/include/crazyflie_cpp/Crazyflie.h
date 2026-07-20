@@ -208,6 +208,39 @@ public:
     float x, float y, float z,
     float qx, float qy, float qz, float qw);
 
+  /**
+   * @brief Stream one race-policy observation vector to the firmware's
+   * app-channel (CRTP_PORT_PLATFORM/appChannel — see crazyflie-firmware's
+   * app_channel.h/platformservice.c) for an onboard-running policy. This
+   * carries observations only, never a control command — the CF computes
+   * its own action via controllerOutOfTree() (examples/app_race_policy's
+   * race_controller.c) and never routes through controller_pid.c/the
+   * setpoint mechanism for this task; see sendSetpoint/sendHoverSetpoint
+   * etc. above for the (unrelated) closed-loop-PID path this deliberately
+   * bypasses.
+   *
+   * Chunks obs into ceil(obsDim / floatsPerChunk) packets (firmware's
+   * APPCHANNEL_MTU=30 bytes caps each packet at 1 seq byte + 28 payload
+   * bytes = 7 floats — see kFloatsPerChunk in the .cpp). Packets are sent
+   * in order, sequence 0..numChunks-1, every one padded to a full chunk
+   * (the receiver knows the true obsDim at compile time — from the
+   * exported policy header — so it discards the padding itself rather
+   * than this method needing to signal a partial last chunk over the
+   * wire). obsDim must match that compiled-in constant exactly: a mismatch
+   * silently misaligns every chunk boundary on the firmware side.
+   *
+   * No delivery/ordering guarantee beyond whatever the underlying radio
+   * link already provides — a dropped or reordered packet mid-frame is not
+   * currently detected or recovered from on either end. Fine for bench
+   * testing; revisit before relying on this for actual flight (e.g. a
+   * per-frame counter the firmware can use to discard a stale partial
+   * frame before running the policy on it).
+   *
+   * @param obs Pointer to obsDim floats (one observation, no batch dim)
+   * @param obsDim Number of floats in obs
+   */
+  void sendRaceObservation(const float* obs, size_t obsDim);
+
   void sendPing();
   void processAllPackets();
   void reboot();

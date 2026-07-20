@@ -223,6 +223,44 @@ void Crazyflie::sendExternalPoseUpdate(
   sendPacket(pose);
 }
 #endif
+
+namespace {
+  // CRTP_PORT_PLATFORM / appChannel — see crazyflie-firmware's
+  // platformservice.c (the enum values themselves: platformCommand=0x00,
+  // versionCommand=0x01, appChannel=0x02).
+  constexpr uint8_t kAppChannelPort = 0x0D;
+  constexpr uint8_t kAppChannelChannel = 0x02;
+  // 1 seq byte + 7 floats (28 bytes) = 29 bytes payload -> Packet total
+  // size 30, exactly matching firmware's APPCHANNEL_MTU (app_channel.h) —
+  // not a soft limit: the firmware silently crops anything larger.
+  constexpr size_t kFloatsPerChunk = 7;
+}
+
+void Crazyflie::sendRaceObservation(const float* obs, size_t obsDim)
+{
+  const size_t numChunks = (obsDim + kFloatsPerChunk - 1) / kFloatsPerChunk;
+  for (size_t chunk = 0; chunk < numChunks; ++chunk) {
+    const size_t offset = chunk * kFloatsPerChunk;
+    const size_t count = (obsDim - offset < kFloatsPerChunk)
+      ? (obsDim - offset) : kFloatsPerChunk;
+
+    // Zero-padded past `count` — the receiver derives the true per-chunk
+    // valid-float count itself from the compiled-in obsDim (see
+    // sendRaceObservation's doc comment in Crazyflie.h), so padding here is
+    // never read as real observation data on the other end.
+    float payload[kFloatsPerChunk] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    std::memcpy(payload, &obs[offset], count * sizeof(float));
+
+    bitcraze::crazyflieLinkCpp::Packet packet(
+      kAppChannelPort, kAppChannelChannel,
+      /*payloadSize=*/1 + kFloatsPerChunk * sizeof(float));
+    packet.setPayloadAt(0, static_cast<uint8_t>(chunk));
+    packet.setPayloadAt(1, reinterpret_cast<const uint8_t*>(payload),
+                         kFloatsPerChunk * sizeof(float));
+    m_connection.send(packet);
+  }
+}
+
 void Crazyflie::sendPing()
 {
   auto p = m_connection.recv(1);

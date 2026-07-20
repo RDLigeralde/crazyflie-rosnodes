@@ -6,7 +6,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
 from std_srvs.srv import Trigger
-from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations, OdometryArray
+from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations, OdometryArray, RaceObservation
 from jirl_interfaces.srv import UpdateSetpoint, StartTrajectory
 
 from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
@@ -23,6 +23,7 @@ from cflib.utils import uri_helper
 from .controller_qos import *
 from .controller_fsm import ControllerFSM
 from .controller_policy import RacingPolicy
+from .controller_policy_jax import JaxRacingPolicy
 
 class ControllerNode(Node):
 
@@ -101,6 +102,18 @@ class ControllerNode(Node):
         self.policy = RacingPolicy(crazyflie_params, self.policy_path, self.params, device=self.device, use_cond=self.use_cond)
         self.se3_controller = SE3ControlCTBR(crazyflie_params)
 
+        # Onboard-policy mode (see controller_params.py) — only the v3
+        # obs-computation/gate-tracking half of JaxRacingPolicy gets used
+        # (get_observation()); its network weights load but are never
+        # applied. None when disabled so single_update() can branch on it
+        # directly rather than checking the enable flag and the object
+        # separately.
+        self.onboard_obs_builder = None
+        if self.onboard_policy_enable:
+            self.onboard_obs_builder = JaxRacingPolicy(
+                self.onboard_policy_checkpoint, self.params, device=self.device
+            )
+
     def init_callback_groups(self):
         """
         Init callback groups
@@ -142,6 +155,15 @@ class ControllerNode(Node):
         self.obs_pub = self.create_publisher(
             Observations,
             'observations',
+            qos_best_effort
+        )
+
+        # Race observation stream to the onboard policy (see
+        # controller_params.py's onboard_policy.enable) — parallel to
+        # cmd_pub above, sent instead of it (not alongside) when active.
+        self.race_obs_pub = self.create_publisher(
+            RaceObservation,
+            '/race_obs',
             qos_best_effort
         )
 

@@ -1,13 +1,33 @@
-from jirl_interfaces.msg import CommandCTBR, OdometryArray
+from jirl_interfaces.msg import CommandCTBR, OdometryArray, RaceObservation
 from jirl_interfaces.srv import Arm
 from cflib.utils import uri_helper
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 
+from .appchannel_utils import chunk_observation
+
 def cmd_clbk(self, msg: CommandCTBR):
     if msg.crazyflie_name in self.scf_dict:
         scf = self.scf_dict[msg.crazyflie_name]
         scf.cf.commander.send_setpoint(msg.roll_rate, msg.pitch_rate, -msg.yaw_rate, msg.thrust_pwm)
+
+def race_obs_clbk(self, msg: RaceObservation):
+    """Stream one observation to the onboard policy's app-channel (see
+    appchannel_utils.chunk_observation's docstring for the protocol and
+    why this — not crazyflie_cpp's Crazyflie::sendRaceObservation — is the
+    implementation actually reachable from the running system).
+
+    cf.appchannel.send_packet(bytes)'s exact signature is assumed from
+    cflib's documented API (send one packet, no built-in multi-packet
+    framing) — cflib isn't checked out in this repo (git submodule
+    uninitialized) so this hasn't been verified against the actual pinned
+    version. Confirm once cflib is available; if the real API differs,
+    only this loop body needs to change, not the chunking protocol itself.
+    """
+    if msg.crazyflie_name in self.scf_dict:
+        scf = self.scf_dict[msg.crazyflie_name]
+        for packet in chunk_observation(msg.obs):
+            scf.cf.appchannel.send_packet(packet)
 
 def mocap_clbk(self, msg: OdometryArray):
     for odom in msg.odom_array:

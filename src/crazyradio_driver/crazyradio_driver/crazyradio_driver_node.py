@@ -1,7 +1,7 @@
 from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
-from jirl_interfaces.msg import CommandCTBR, OdometryArray
+from jirl_interfaces.msg import CommandCTBR, OdometryArray, RaceObservation
 from jirl_interfaces.srv import Arm
 
 from cflib.utils import uri_helper
@@ -18,7 +18,7 @@ class CrazyradioDriverNode(Node):
 
     # Import methods
     from .crazyradio_driver_params import init_parameters
-    from .crazyradio_driver_callbacks import cmd_clbk, reconnect_clbk, mocap_clbk, arm_clbk #, logger_clbk
+    from .crazyradio_driver_callbacks import cmd_clbk, reconnect_clbk, mocap_clbk, arm_clbk, race_obs_clbk #, logger_clbk
 
     scf_dict = {}
 
@@ -106,6 +106,18 @@ class CrazyradioDriverNode(Node):
             self.mocap_clbk,
             qos_best_effort,
             callback_group=self.mocap_cgroup
+        )
+
+        # Race observation (onboard-policy mode — see controller_utils.py's
+        # single_update(); parallel to /ctbr_cmd's own subscription above,
+        # same callback group since it's the same rate-class of per-tick
+        # traffic to the same Crazyflie).
+        self.race_obs_sub = self.create_subscription(
+            RaceObservation,
+            '/race_obs',
+            self.race_obs_clbk,
+            qos_best_effort,
+            callback_group=self.cmd_cgroup
         )
 
     def init_timers(self):

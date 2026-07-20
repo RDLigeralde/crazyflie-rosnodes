@@ -27,6 +27,8 @@ def init_parameters(self):
                     ('policy.pass_gate_thr', 0.0),
                     ('takeoff_height', 0.0),
                     ('use_cond', True),
+                    ('onboard_policy.enable', False),
+                    ('onboard_policy.checkpoint_path', ''),
                    ])
 
     # Get parameters
@@ -50,6 +52,16 @@ def init_parameters(self):
     self.waypoints = waypoints_flat.reshape(-1, 6)
     self.initial_waypoint = self.get_parameter('policy.initial_waypoint').value
     self.use_cond = self.get_parameter('use_cond').value
+    # Onboard-policy mode: the workstation computes+streams v3 observations
+    # over the app-channel instead of running a policy locally and sending
+    # CTBR commands — see controller_utils.py's single_update() and
+    # crazyflie-firmware's examples/app_race_policy. Off by default so
+    # existing (workstation-side) behavior is unaffected unless explicitly
+    # enabled. checkpoint_path only needs gate_positions/gate_normals/
+    # gate_side from its config.json (see JaxRacingPolicy.get_observation) —
+    # its network weights are loaded but never used in this mode.
+    self.onboard_policy_enable = self.get_parameter('onboard_policy.enable').value
+    self.onboard_policy_checkpoint = self.get_parameter('onboard_policy.checkpoint_path').value
 
     # Print parameters
     self.get_logger().info(f'crazyradio_enable: {self.driver_enable}')
@@ -72,6 +84,8 @@ def init_parameters(self):
     self.get_logger().info(f'initial_waypoint: {self.initial_waypoint}')
     self.get_logger().info(f'takeoff_height: {self.takeoff_height}')
     self.get_logger().info(f'use_cond: {self.use_cond}')
+    self.get_logger().info(f'onboard_policy_enable: {self.onboard_policy_enable}')
+    self.get_logger().info(f'onboard_policy_checkpoint: {self.onboard_policy_checkpoint}')
 
     #
     self.waypoints_quat = np.zeros((self.waypoints.shape[0], 4), dtype=np.float32)

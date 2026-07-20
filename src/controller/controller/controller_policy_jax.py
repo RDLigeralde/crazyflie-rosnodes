@@ -306,18 +306,34 @@ class JaxRacingPolicy:
             lin_vel_b, ang_vel_b, gravity_b, target_b, target_b_next, normal_b, normal_b_next,
         ]).astype(np.float32)
 
-    def update(self, state):
-        """state must provide 'x' (world position), 'R' (body->world
-        rotation matrix), 'v_b' (body-frame linear velocity), 'w_b'
-        (body-frame angular velocity) — all already present in
-        controller_utils.py's self.mocap_pose dict."""
+    def get_observation(self, state) -> np.ndarray:
+        """Compute the current v3 observation WITHOUT running the policy
+        network — used for onboard-policy mode (see controller_utils.py's
+        single_update()), where the trained network runs on the Crazyflie
+        itself (crazyflie-firmware/examples/app_race_policy) and the
+        workstation's only job is computing+streaming this observation, not
+        the action. Advances gate-tracking state exactly as update() does
+        (same underlying call), so gate_idx stays correct even if a run
+        switches between onboard and workstation-side execution.
+
+        state must provide 'x' (world position), 'R' (body->world rotation
+        matrix), 'v_b' (body-frame linear velocity), 'w_b' (body-frame
+        angular velocity) — all already present in controller_utils.py's
+        self.mocap_pose dict."""
         pos = np.asarray(state["x"], dtype=np.float64)
         R = np.asarray(state["R"], dtype=np.float64)
         lin_vel_b = np.asarray(state["v_b"], dtype=np.float64)
         ang_vel_b = np.asarray(state["w_b"], dtype=np.float64)
 
         self._update_gate_tracking(pos, R)
-        obs = self._build_obs(pos, R, lin_vel_b, ang_vel_b)
+        return self._build_obs(pos, R, lin_vel_b, ang_vel_b)
+
+    def update(self, state):
+        """state must provide 'x' (world position), 'R' (body->world
+        rotation matrix), 'v_b' (body-frame linear velocity), 'w_b'
+        (body-frame angular velocity) — all already present in
+        controller_utils.py's self.mocap_pose dict."""
+        obs = self.get_observation(state)
         obs_jax = jnp.asarray(obs)
 
         if self.recurrent:

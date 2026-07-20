@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations
+from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations, RaceObservation
 from nav_msgs.msg import Odometry
 
 from rotorpy.trajectories.hover_traj import HoverTraj
@@ -59,6 +59,24 @@ def single_update(self, msg: Odometry):
     thrust_pwm_max = self.low_level_controller_thrust_pwm_max
 
     if self.fsm.state == 'racing':
+        if self.onboard_obs_builder is not None:
+            # Onboard-policy mode (controller_params.py's onboard_policy.enable):
+            # the Crazyflie runs the policy itself (crazyflie-firmware's
+            # examples/app_race_policy) — the workstation's only job during
+            # racing is computing this observation and streaming it over
+            # the app-channel via /race_obs. No CTBR command is sent at all
+            # (unlike the workstation-side branch below): send_ctbr_command
+            # is never called for this FSM state while this mode is active,
+            # matching crazyradio_driver_cpp/crazyflie_driver.cpp's
+            # ctbr_clbk path being left completely idle during racing.
+            obs = self.onboard_obs_builder.get_observation(self.mocap_pose)
+
+            race_obs_msg = RaceObservation()
+            race_obs_msg.crazyflie_name = self.get_namespace().split('/')[-1]
+            race_obs_msg.obs = [float(v) for v in obs]
+            self.race_obs_pub.publish(race_obs_msg)
+
+            return
         control, obs = self.policy.update(self.mocap_pose)
 
         obs_msg = Observations()

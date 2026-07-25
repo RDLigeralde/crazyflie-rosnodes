@@ -1,0 +1,8 @@
+build:
+  packages-skip:
+    - cfclient
+    - crazyradio_driver_cpp
+test:
+  packages-skip:
+    - cfclient
+    - crazyradio_driver_cpp

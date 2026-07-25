@@ -1,19 +1,26 @@
-# dua-template
+# Crazyflie-ROSNodes
 
-GitHub template repositories for projects based on the Distributed Unified Architecture.
-
-See [`dua-template.md`](dua-template.md) for more information.
+Superset of `ros_quad_sim2real` for sending observations to onboard RL policies instead of ground-computed CTBR commands from ground workstation
 
 ---
 
-## Copyright and License
+## Setup
+```bash
+git clone --recurse-submodules https://github.com/RDLigeralde/crazyflie-rosnodes
+cd crazyflie-rosnodes
+```
 
-Copyright 2024 dotX Automation s.r.l.
+### Bare Metal
+1. ROS2 Installation: [ROS2 Jazzy Installation Docs](https://docs.ros.org/en/jazzy/Installation.html)
+2. Shell Configuration: `source /opt/ros/jazzy/setup.bash` (or `.zsh`)
+3. Build + Register Nodes: `colcon build && source install/setup.bash`
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
-
-You may obtain a copy of the License at <http://www.apache.org/licenses/LICENSE-2.0>.
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-
-See the License for the specific language governing permissions and limitations under the License.
+### Dockerized
+1. VSCode Installation: [Download Page](https://code.visualstudio.com/download?_exp_download=fb315fc982)
+2. Dev Containers Extension: [Download Page](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+3. Container Startup:
+    1. CPU-only: `USER_UID=$(id -u) docker compose -f docker/container-x86-dev/.devcontainer/docker-compose.yaml up -d`
+    2. CUDA-enabled (unnecessary if policy not running on workstation): `USER_UID=$(id -u) docker compose -f docker/container-x86-cudev/.devcontainer/docker-compose.yaml up -d`
+        - `USER_UID=$(id -u)` ensures equivalent write permissions to the host shell account
+4. Attach to Container: open VSCode command pallate with `f1` and run `Dev Containers: Attach to Running Container`
+5. Repeat steps 2, 3 from bare metal instructions, replacing `*.bash` with `*.zsh` if needbe

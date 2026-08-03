@@ -40,7 +40,11 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 # Must match export_policy_c.py's _HEADER_STRUCT/_MAGIC and policy.h's
 # PolicyWeightsHeader_t/POLICY_WEIGHTS_MAGIC exactly.
 _HEADER_STRUCT = struct.Struct("<6I")  # magic, obsDim, actionDim, numLayers, totalFloats, crc32
-_MAGIC = 0x314C4F50
+# 'POL2' (bumped from 'POL1'): payload is now fp16 (2 bytes/value) instead
+# of float32 (4 bytes/value) — see export_policy_c.py's _c_flat_array
+# docstring. The magic bump means an old float32 blob gets cleanly rejected
+# here (or by fp16 firmware) instead of silently misinterpreted.
+_MAGIC = 0x324C4F50
 _UPLOAD_TIMEOUT_S = 60.0
 
 
@@ -51,7 +55,7 @@ def _parse_header(blob: bytes):
     if magic != _MAGIC:
         raise ValueError(f"bad magic 0x{magic:08X} (expected 0x{_MAGIC:08X}) — not a policy_weights.bin blob "
                           "produced by export_policy_c.py's export_weights_bin")
-    expected_len = _HEADER_STRUCT.size + total_floats * 4
+    expected_len = _HEADER_STRUCT.size + total_floats * 2  # fp16 = 2 bytes/value
     if len(blob) != expected_len:
         raise ValueError(f"blob length {len(blob)} != header-implied length {expected_len} — truncated/corrupt file")
     return obs_dim, action_dim, num_layers, total_floats, crc

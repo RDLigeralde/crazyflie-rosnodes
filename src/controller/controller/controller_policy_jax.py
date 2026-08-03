@@ -169,23 +169,37 @@ def _thrust_action_to_pwm_frac(thrust_action: float, hover_rpm: float, max_rpm: 
 
 
 class JaxRacingPolicy:
-    """Loads a mjc_dronetests checkpoint (run_dir/{params.pkl,config.json})
-    and runs it in an open-loop-attitude (CTBR) control loop, matching
-    RacingPolicy's update(state) -> (control, obs) interface exactly.
+    """Loads a mjc_dronetests checkpoint from its config.json (the sibling
+    params.pkl, if present, is loaded lazily — see below) and runs it in an
+    open-loop-attitude (CTBR) control loop, matching RacingPolicy's
+    update(state) -> (control, obs) interface exactly.
 
     params (dict) mirrors RacingPolicy's own constructor contract:
         "gate_side": float
         "max_roll_rate_dps" / "max_pitch_rate_dps" / "max_yaw_rate_dps": float
             — REQUIRES HARDWARE CALIBRATION, see module docstring.
-    Gate positions/normals come from run_dir/config.json (saved by
+    Gate positions/normals come from config.json (saved by
     mjc_dronetests/train.py from the actual gates the checkpoint trained
     against), not from a separately-configured waypoints param — avoids the
     two ever silently drifting apart.
+
+    config_path is the path to config.json itself, not the run directory —
+    onboard-policy mode (controller_params.py's onboard_policy.checkpoint_path,
+    consumed via get_observation() below) only ever needs the gate geometry
+    in config.json; the actual network weights run on the Crazyflie itself
+    (crazyflie-firmware/examples/app_race_policy) and are never used
+    ground-station-side in that mode. params.pkl is loaded from alongside
+    config_path (config_path.parent / "params.pkl") only if it actually
+    exists there — when it doesn't, self.net_params stays None and update()
+    (the network-driven path, not used by onboard-policy mode) raises a
+    clear error instead of failing on a missing file, so a ground station
+    only needs to ship config.json for the onboard-policy case.
     """
 
-    def __init__(self, run_dir, params: dict, device: str = "cpu"):
-        run_dir = Path(run_dir)
-        with open(run_dir / "config.json") as f:
+    def __init__(self, config_path, params: dict, device: str = "cpu"):
+        config_path = Path(config_path)
+        run_dir = config_path.parent
+        with open(config_path) as f:
             cfg = json.load(f)
 
         if cfg["task"] != "race":
@@ -241,21 +255,30 @@ class JaxRacingPolicy:
                 activation=cfg["activation"],
             )
 
-        with open(run_dir / "params.pkl", "rb") as f:
-            import pickle
-            self.net_params = pickle.load(f)
+        params_path = run_dir / "params.pkl"
+        if params_path.exists():
+            with open(params_path, "rb") as f:
+                import pickle
+                self.net_params = pickle.load(f)
 
-        # Warm-up / shape-check the network once at load time so a shape
-        # mismatch surfaces immediately at startup, not on the first control
-        # cycle in flight.
-        dummy_obs = jnp.zeros((21,), dtype=jnp.float32)
-        if self.recurrent:
-            _, _ = self.network.apply(
-                self.net_params, self.hstate,
-                (dummy_obs[jnp.newaxis, jnp.newaxis, :], jnp.array([[True]])),
-            )
+            # Warm-up / shape-check the network once at load time so a shape
+            # mismatch surfaces immediately at startup, not on the first
+            # control cycle in flight.
+            dummy_obs = jnp.zeros((21,), dtype=jnp.float32)
+            if self.recurrent:
+                _, _ = self.network.apply(
+                    self.net_params, self.hstate,
+                    (dummy_obs[jnp.newaxis, jnp.newaxis, :], jnp.array([[True]])),
+                )
+            else:
+                _ = self.network.apply(self.net_params, dummy_obs)
         else:
-            _ = self.network.apply(self.net_params, dummy_obs)
+            # No params.pkl alongside config_path — fine for onboard-policy
+            # mode (only get_observation() is ever called, see class
+            # docstring); update() guards against this and raises clearly if
+            # actually called without weights, instead of failing on a
+            # missing file at construction time.
+            self.net_params = None
 
         self.max_roll_rate_dps = params.get("max_roll_rate_dps", 90.0)
         self.max_pitch_rate_dps = params.get("max_pitch_rate_dps", 90.0)
@@ -333,6 +356,14 @@ class JaxRacingPolicy:
         rotation matrix), 'v_b' (body-frame linear velocity), 'w_b'
         (body-frame angular velocity) — all already present in
         controller_utils.py's self.mocap_pose dict."""
+        if self.net_params is None:
+            raise RuntimeError(
+                "JaxRacingPolicy.update() called but no params.pkl was found "
+                "alongside config.json at construction time — this instance "
+                "can only serve get_observation() (onboard-policy mode). "
+                "Point config_path at a run directory that also has "
+                "params.pkl if you need network-driven control here."
+            )
         obs = self.get_observation(state)
         obs_jax = jnp.asarray(obs)
 

@@ -71,11 +71,31 @@ endif()
 # --- End of Example Building Logic ---
 
 
-# --- Installation Rules (Commented out - Keep as is or enable if needed) ---
-# include(CMakePackageConfigHelpers)
-# write_basic_package_version_file(...)
-# install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/crazyflie_cpp ...)
-# install(TARGETS crazyflie_cpp ...)
-# install(EXPORT crazyflie_cpp-targets ...)
-# install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/cmake/crazyflie_cpp-config.cmake" ...)
-# install(FILES package.xml ...)
+# --- Installation Rules ---
+# Generates lib/cmake/crazyflie_cpp/crazyflie_cpp-targets.cmake (the file
+# cmake/crazyflie_cpp-config.cmake already includes()s, but that never
+# existed with everything below commented out — that's the whole reason
+# downstream find_package(crazyflie_cpp) failed) plus a copy of
+# crazyflie_cpp-config.cmake itself, both under lib/cmake/crazyflie_cpp so
+# a plain -DCMAKE_PREFIX_PATH=<install prefix> is enough for consumers to
+# find it, matching the crazyflie_cpp::crazyflie_cpp target name
+# src/crazyradio_driver_cpp/CMakeLists.txt already links against.
+include(GNUInstallDirs)
+install(TARGETS crazyflie_cpp
+  EXPORT crazyflie_cpp-targets
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/crazyflie_cpp
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(EXPORT crazyflie_cpp-targets
+  FILE crazyflie_cpp-targets.cmake
+  NAMESPACE crazyflie_cpp::
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/crazyflie_cpp
+)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/cmake/crazyflie_cpp-config.cmake"
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/crazyflie_cpp
+)

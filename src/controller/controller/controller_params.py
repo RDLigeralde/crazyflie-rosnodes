@@ -57,9 +57,12 @@ def init_parameters(self):
     # CTBR commands — see controller_utils.py's single_update() and
     # crazyflie-firmware's examples/app_race_policy. Off by default so
     # existing (workstation-side) behavior is unaffected unless explicitly
-    # enabled. checkpoint_path only needs gate_positions/gate_normals/
-    # gate_side from its config.json (see JaxRacingPolicy.get_observation) —
-    # its network weights are loaded but never used in this mode.
+    # enabled. checkpoint_path is a path to config.json itself (not the run
+    # directory) — this mode only ever needs gate_positions/gate_normals/
+    # gate_side from it (see JaxRacingPolicy.get_observation); params.pkl is
+    # optional and, if the ground station doesn't have a copy alongside
+    # config.json, is simply never loaded (see JaxRacingPolicy's docstring)
+    # rather than requiring the whole run directory just for this mode.
     self.onboard_policy_enable = self.get_parameter('onboard_policy.enable').value
     self.onboard_policy_checkpoint = self.get_parameter('onboard_policy.checkpoint_path').value
 

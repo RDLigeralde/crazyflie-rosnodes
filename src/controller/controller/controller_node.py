@@ -104,10 +104,11 @@ class ControllerNode(Node):
 
         # Onboard-policy mode (see controller_params.py) — only the v3
         # obs-computation/gate-tracking half of JaxRacingPolicy gets used
-        # (get_observation()); its network weights load but are never
-        # applied. None when disabled so single_update() can branch on it
-        # directly rather than checking the enable flag and the object
-        # separately.
+        # (get_observation()); onboard_policy_checkpoint is a path to
+        # config.json itself, and params.pkl (if not present alongside it)
+        # is simply never loaded — see JaxRacingPolicy's docstring. None
+        # when disabled so single_update() can branch on it directly rather
+        # than checking the enable flag and the object separately.
         self.onboard_obs_builder = None
         if self.onboard_policy_enable:
             self.onboard_obs_builder = JaxRacingPolicy(

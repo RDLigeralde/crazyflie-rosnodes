@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations, RaceObservation
+from jirl_interfaces.msg import CommandCTBR, CommandAction, CommandAttitude, Trajectory, Observations
 from nav_msgs.msg import Odometry
 
 from rotorpy.trajectories.hover_traj import HoverTraj
@@ -20,6 +20,46 @@ def send_ctbr_command(self, thrust_pwm, thrust_N, roll_rate, pitch_rate, yaw_rat
     command_msg.yaw_rate = float(yaw_rate)
 
     self.cmd_pub.publish(command_msg)
+
+def send_action_command(self, action):
+    """Custom-controller / open-loop-mixer dispatch (action_type="attitude"
+    JaxRacingPolicy checkpoints): stream the policy's raw 4-float action
+    [thrust_norm, roll, pitch, yaw_rate] for crazyflie-firmware's
+    examples/app_race_policy (race_controller.c/mixer.c) to consume
+    on-device, bypassing PID entirely — see Crazyflie::sendRaceAction (the
+    receiving end: action_channel.c). seq/tx_tick_ms let the firmware
+    reject stale/reordered packets and measure the true send period, same
+    fields action_channel.c's ActionPacket expects.
+    """
+    self._action_seq = (getattr(self, '_action_seq', 0) + 1) & 0xFF
+    command_msg = CommandAction()
+    command_msg.crazyflie_name = self.get_namespace().split('/')[-1]
+    command_msg.seq = self._action_seq
+    command_msg.tx_tick_ms = int(time.time() * 1000) & 0xFFFF
+    command_msg.action = [float(a) for a in action]
+
+    self.action_pub.publish(command_msg)
+
+def send_attitude_command(self, roll_deg, pitch_deg, yaw_rate_dps, thrust_pwm):
+    """Onboard-Mellinger dispatch (action_type="mellinger" JaxRacingPolicy
+    checkpoints): a real attitude setpoint (roll/pitch as angles, yaw
+    closed into a rate by JaxRacingPolicy's own P-wrapper — see
+    controller_policy_jax.py's update()) for firmware's stock Mellinger
+    controller (stabilizer.controller=2, set at connect time — see
+    crazyradio_driver's connect sequence) to consume via the legacy RPYT
+    setpoint. Deliberately a separate message/topic from CommandCTBR/
+    CommandAction — its roll/pitch fields are angles, not rates, and
+    reusing CommandCTBR's rate-named fields for angle values would be a
+    silent unit mismatch waiting to happen.
+    """
+    command_msg = CommandAttitude()
+    command_msg.crazyflie_name = self.get_namespace().split('/')[-1]
+    command_msg.roll_deg = float(roll_deg)
+    command_msg.pitch_deg = float(pitch_deg)
+    command_msg.yaw_rate_dps = float(yaw_rate_dps)
+    command_msg.thrust_pwm = int(thrust_pwm)
+
+    self.attitude_pub.publish(command_msg)
 
 def send_trajectory(self, traj):
     """
@@ -59,35 +99,62 @@ def single_update(self, msg: Odometry):
     thrust_pwm_max = self.low_level_controller_thrust_pwm_max
 
     if self.fsm.state == 'racing':
-        if self.onboard_obs_builder is not None:
-            # Onboard-policy mode (controller_params.py's onboard_policy.enable):
-            # the Crazyflie runs the policy itself (crazyflie-firmware's
-            # examples/app_race_policy) — the workstation's only job during
-            # racing is computing this observation and streaming it over
-            # the app-channel via /race_obs. No CTBR command is sent at all
-            # (unlike the workstation-side branch below): send_ctbr_command
-            # is never called for this FSM state while this mode is active,
-            # matching crazyradio_driver_cpp/crazyflie_driver.cpp's
-            # ctbr_clbk path being left completely idle during racing.
-            obs = self.onboard_obs_builder.get_observation(self.mocap_pose)
-
-            race_obs_msg = RaceObservation()
-            race_obs_msg.crazyflie_name = self.get_namespace().split('/')[-1]
-            race_obs_msg.obs = [float(v) for v in obs]
-            self.race_obs_pub.publish(race_obs_msg)
-
-            return
         control, obs = self.policy.update(self.mocap_pose)
 
-        obs_msg = Observations()
-        obs_msg.lin_vel = obs[0:3]
-        obs_msg.rot = obs[3:12]
-        obs_msg.corners_pos_b_curr = obs[12:24]
-        obs_msg.corners_pos_b_next = obs[24:36]
-        obs_msg.cond = obs[36:38]
+        # Observations.msg's layout is RacingPolicy's own (waypoint/corners-
+        # based, 38-dim) — JaxRacingPolicy's v3 obs is a different 21-dim
+        # layout, so only publish this telemetry for the policy it actually
+        # describes rather than silently mis-slicing a differently-shaped
+        # array.
+        action_type = getattr(self.policy, 'action_type', None)
+        if action_type is None:
+            obs_msg = Observations()
+            obs_msg.lin_vel = obs[0:3]
+            obs_msg.rot = obs[3:12]
+            obs_msg.corners_pos_b_curr = obs[12:24]
+            obs_msg.corners_pos_b_next = obs[24:36]
+            obs_msg.cond = obs[36:38]
 
-        self.obs_pub.publish(obs_msg)
+            self.obs_pub.publish(obs_msg)
 
+        if action_type in ('attitude', 'mellinger'):
+            # Both new paths dispatch by publishing to a topic a separate
+            # crazyradio_driver node consumes (see send_action_command/
+            # send_attitude_command) — that's only reachable when
+            # driver_enable=False (the documented default: one controller
+            # node per drone namespace, a separate driver node per drone).
+            # driver_enable=True (embedded driver, one controller node
+            # flying several drones via multi_mocap_clbk's direct
+            # scf.cf.commander.send_setpoint call) has no equivalent direct
+            # dispatch for these two paths yet, and that mode already has
+            # known multi-drone state-sharing problems independent of this
+            # change — fail loud rather than silently publish to a topic
+            # nothing consumes.
+            if self.driver_enable:
+                self.get_logger().error(
+                    f"action_type={action_type!r} is not supported with "
+                    f"crazyradio_driver.enable=True (embedded driver) — use "
+                    f"a separate crazyradio_driver node instead."
+                )
+                return
+            if action_type == 'attitude':
+                # Custom controller / open-loop mixer path — see
+                # send_action_command's docstring. Bypasses
+                # send_ctbr_command entirely; firmware's on-device mixer
+                # computes thrust, not this workstation.
+                self.send_action_command(control['raw_action'])
+            else:
+                # Onboard-Mellinger path — see send_attitude_command's
+                # docstring. Also bypasses send_ctbr_command: this is a
+                # real angle setpoint, not a CTBR rate setpoint.
+                roll_deg, pitch_deg, yaw_rate_dps = control['cmd_attitude']
+                thrust_pwm = int(thrust_pwm_min + control['cmd_thrust'] * (thrust_pwm_max - thrust_pwm_min))
+                self.send_attitude_command(roll_deg, pitch_deg, yaw_rate_dps, thrust_pwm)
+            return
+
+        # action_type is None: the legacy PyTorch RacingPolicy, unaffected
+        # by the attitude/mellinger split above — same CTBR path every
+        # other FSM state below also uses.
         thrust_des_perc = control['cmd_thrust']
         thrust_pwm = int(thrust_pwm_min + thrust_des_perc * (thrust_pwm_max - thrust_pwm_min))
 

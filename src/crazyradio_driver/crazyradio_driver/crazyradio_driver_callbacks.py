@@ -1,33 +1,46 @@
-from jirl_interfaces.msg import CommandCTBR, OdometryArray, RaceObservation
+from jirl_interfaces.msg import CommandCTBR, CommandAction, CommandAttitude, OdometryArray
 from jirl_interfaces.srv import Arm
 from cflib.utils import uri_helper
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 
-from .appchannel_utils import chunk_observation
+from .appchannel_utils import pack_action
 
 def cmd_clbk(self, msg: CommandCTBR):
     if msg.crazyflie_name in self.scf_dict:
         scf = self.scf_dict[msg.crazyflie_name]
         scf.cf.commander.send_setpoint(msg.roll_rate, msg.pitch_rate, -msg.yaw_rate, msg.thrust_pwm)
 
-def race_obs_clbk(self, msg: RaceObservation):
-    """Stream one observation to the onboard policy's app-channel (see
-    appchannel_utils.chunk_observation's docstring for the protocol and
-    why this — not crazyflie_cpp's Crazyflie::sendRaceObservation — is the
-    implementation actually reachable from the running system).
+def action_clbk(self, msg: CommandAction):
+    """Custom controller / open-loop mixer path (JaxRacingPolicy
+    action_type="attitude") — stream one action packet to
+    crazyflie-firmware's examples/app_race_policy over the app-channel
+    (action_channel.c is the receiving half; see pack_action's docstring
+    for the wire format both sides must agree on byte-for-byte).
 
     cf.appchannel.send_packet(bytes)'s exact signature is assumed from
     cflib's documented API (send one packet, no built-in multi-packet
     framing) — cflib isn't checked out in this repo (git submodule
     uninitialized) so this hasn't been verified against the actual pinned
-    version. Confirm once cflib is available; if the real API differs,
-    only this loop body needs to change, not the chunking protocol itself.
+    version. Confirm once cflib is available.
     """
     if msg.crazyflie_name in self.scf_dict:
         scf = self.scf_dict[msg.crazyflie_name]
-        for packet in chunk_observation(msg.obs):
-            scf.cf.appchannel.send_packet(packet)
+        scf.cf.appchannel.send_packet(pack_action(msg.seq, msg.tx_tick_ms, msg.action))
+
+def attitude_clbk(self, msg: CommandAttitude):
+    """Onboard-Mellinger path (JaxRacingPolicy action_type="mellinger") —
+    a real attitude setpoint via the legacy RPYT commander, for firmware's
+    stock Mellinger controller (stabilizer.controller=2, set at connect
+    time — see reconnect_clbk) to consume. Reuses the exact same
+    send_setpoint call cmd_clbk uses for the (rate-based) CTBR path — the
+    difference is entirely in what the caller means by roll/pitch (angles,
+    not rates) and in stabilizer.controller's value, not in the wire call
+    itself.
+    """
+    if msg.crazyflie_name in self.scf_dict:
+        scf = self.scf_dict[msg.crazyflie_name]
+        scf.cf.commander.send_setpoint(msg.roll_deg, msg.pitch_deg, -msg.yaw_rate_dps, msg.thrust_pwm)
 
 def mocap_clbk(self, msg: OdometryArray):
     for odom in msg.odom_array:
@@ -77,6 +90,19 @@ def reconnect_clbk(self):
 
                 self.scf_dict[crazyflie_name].cf.param.set_value('stabilizer.estimator', '2')
                 self.scf_dict[crazyflie_name].param.set_value('locSrv.extQuatStdDev', 0.06)
+                if self.mellinger_enable:
+                    # Onboard-Mellinger path — sets the operator's INTENT to
+                    # route the standard setpoint through
+                    # controllerMellingerFirmware() instead of
+                    # controllerPid() (see crazyflie-firmware's
+                    # examples/app_race_policy/src/race_controller.c). One
+                    # firmware build now serves both this path and the
+                    # attitude-mixer path — NOT stabilizer.controller (that
+                    # param switches the ACTIVE controller away from
+                    # controllerOutOfTree() entirely, discarding
+                    # race_controller.c's own arbitration/PID-fallback along
+                    # with it; see crazyradio_driver_params.py).
+                    self.scf_dict[crazyflie_name].cf.param.set_value('ctrlRace.mellingerEnable', '1')
             except Exception as e:
                 continue
 

@@ -1,6 +1,7 @@
 //#include <regex>
 #include <mutex>
 #include <cassert>
+#include <chrono>
 
 #include "Crazyflie.h"
 #include "crtp.h"
@@ -230,35 +231,36 @@ namespace {
   // versionCommand=0x01, appChannel=0x02).
   constexpr uint8_t kAppChannelPort = 0x0D;
   constexpr uint8_t kAppChannelChannel = 0x02;
-  // 1 seq byte + 7 floats (28 bytes) = 29 bytes payload -> Packet total
-  // size 30, exactly matching firmware's APPCHANNEL_MTU (app_channel.h) —
-  // not a soft limit: the firmware silently crops anything larger.
-  constexpr size_t kFloatsPerChunk = 7;
+  // Must match action_channel.c's packed ActionPacket struct byte-for-byte:
+  // uint8_t seq; uint16_t txTickMs; float action[4]; = 1 + 2 + 16 = 19
+  // bytes, inside firmware's APPCHANNEL_MTU (30) — not a soft limit: the
+  // firmware silently crops anything larger.
+  constexpr size_t kRaceActionDim = 4;
+  constexpr size_t kRaceActionPayloadSize = 1 + 2 + kRaceActionDim * sizeof(float);
 }
 
-void Crazyflie::sendRaceObservation(const float* obs, size_t obsDim)
+void Crazyflie::sendRaceAction(const float action[4])
 {
-  const size_t numChunks = (obsDim + kFloatsPerChunk - 1) / kFloatsPerChunk;
-  for (size_t chunk = 0; chunk < numChunks; ++chunk) {
-    const size_t offset = chunk * kFloatsPerChunk;
-    const size_t count = (obsDim - offset < kFloatsPerChunk)
-      ? (obsDim - offset) : kFloatsPerChunk;
+  // Ground's own send timestamp (not arrival time) — action_channel.c
+  // measures the true send period from this, isolated from radio jitter.
+  // Wraps at 65536 ms, matching action_channel.c's own wrapping-uint16
+  // subtraction.
+  const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  const uint16_t txTickMs = static_cast<uint16_t>(nowMs & 0xFFFF);
 
-    // Zero-padded past `count` — the receiver derives the true per-chunk
-    // valid-float count itself from the compiled-in obsDim (see
-    // sendRaceObservation's doc comment in Crazyflie.h), so padding here is
-    // never read as real observation data on the other end.
-    float payload[kFloatsPerChunk] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-    std::memcpy(payload, &obs[offset], count * sizeof(float));
+  // packed, little-endian, no gaps — must lay out identically to
+  // action_channel.c's ActionPacket struct.
+  uint8_t payload[kRaceActionPayloadSize];
+  payload[0] = m_raceActionSeq++;
+  std::memcpy(&payload[1], &txTickMs, sizeof(txTickMs));
+  std::memcpy(&payload[3], action, kRaceActionDim * sizeof(float));
 
-    bitcraze::crazyflieLinkCpp::Packet packet(
-      kAppChannelPort, kAppChannelChannel,
-      /*payloadSize=*/1 + kFloatsPerChunk * sizeof(float));
-    packet.setPayloadAt(0, static_cast<uint8_t>(chunk));
-    packet.setPayloadAt(1, reinterpret_cast<const uint8_t*>(payload),
-                         kFloatsPerChunk * sizeof(float));
-    m_connection.send(packet);
-  }
+  bitcraze::crazyflieLinkCpp::Packet packet(
+    kAppChannelPort, kAppChannelChannel,
+    /*payloadSize=*/kRaceActionPayloadSize);
+  packet.setPayloadAt(0, payload, kRaceActionPayloadSize);
+  m_connection.send(packet);
 }
 
 void Crazyflie::sendPing()

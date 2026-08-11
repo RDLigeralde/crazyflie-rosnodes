@@ -19,6 +19,8 @@ def init_parameters(self):
                     ('low_level_controller.thrust_pwm_min', 0),
                     ('low_level_controller.thrust_pwm_max', 0),
                     ('policy.path', ''),
+                    ('policy.jax_enable', False),
+                    ('policy.yaw_kp', 1.0),
                     ('policy.waypoints', [0.0]),
                     ('policy.initial_waypoint', 0),
                     ('policy.max_roll_br', 0.0),
@@ -27,8 +29,6 @@ def init_parameters(self):
                     ('policy.pass_gate_thr', 0.0),
                     ('takeoff_height', 0.0),
                     ('use_cond', True),
-                    ('onboard_policy.enable', False),
-                    ('onboard_policy.checkpoint_path', ''),
                    ])
 
     # Get parameters
@@ -43,6 +43,15 @@ def init_parameters(self):
     self.low_level_controller_thrust_pwm_min = self.get_parameter('low_level_controller.thrust_pwm_min').value
     self.low_level_controller_thrust_pwm_max = self.get_parameter('low_level_controller.thrust_pwm_max').value
     self.policy_path = self.get_parameter('policy.path').value
+    # jax_enable selects JaxRacingPolicy (mjc_dronetests gate-racing
+    # checkpoints, config.json + params.pkl at policy_path) over the
+    # legacy PyTorch waypoint-tracking RacingPolicy — see
+    # controller_node.py's init_controllers(). yaw_kp is only read by
+    # JaxRacingPolicy's action_type="mellinger" path (its on-host
+    # desired-yaw -> yaw-rate P-wrapper gain, see its own docstring) and
+    # otherwise unused.
+    self.policy_jax_enable = self.get_parameter('policy.jax_enable').value
+    self.policy_yaw_kp = self.get_parameter('policy.yaw_kp').value
     self.policy_max_roll_br = self.get_parameter('policy.max_roll_br').value
     self.policy_max_pitch_br = self.get_parameter('policy.max_pitch_br').value
     self.policy_max_yaw_br = self.get_parameter('policy.max_yaw_br').value
@@ -52,19 +61,6 @@ def init_parameters(self):
     self.waypoints = waypoints_flat.reshape(-1, 6)
     self.initial_waypoint = self.get_parameter('policy.initial_waypoint').value
     self.use_cond = self.get_parameter('use_cond').value
-    # Onboard-policy mode: the workstation computes+streams v3 observations
-    # over the app-channel instead of running a policy locally and sending
-    # CTBR commands — see controller_utils.py's single_update() and
-    # crazyflie-firmware's examples/app_race_policy. Off by default so
-    # existing (workstation-side) behavior is unaffected unless explicitly
-    # enabled. checkpoint_path is a path to config.json itself (not the run
-    # directory) — this mode only ever needs gate_positions/gate_normals/
-    # gate_side from it (see JaxRacingPolicy.get_observation); params.pkl is
-    # optional and, if the ground station doesn't have a copy alongside
-    # config.json, is simply never loaded (see JaxRacingPolicy's docstring)
-    # rather than requiring the whole run directory just for this mode.
-    self.onboard_policy_enable = self.get_parameter('onboard_policy.enable').value
-    self.onboard_policy_checkpoint = self.get_parameter('onboard_policy.checkpoint_path').value
 
     # Print parameters
     self.get_logger().info(f'crazyradio_enable: {self.driver_enable}')
@@ -87,8 +83,8 @@ def init_parameters(self):
     self.get_logger().info(f'initial_waypoint: {self.initial_waypoint}')
     self.get_logger().info(f'takeoff_height: {self.takeoff_height}')
     self.get_logger().info(f'use_cond: {self.use_cond}')
-    self.get_logger().info(f'onboard_policy_enable: {self.onboard_policy_enable}')
-    self.get_logger().info(f'onboard_policy_checkpoint: {self.onboard_policy_checkpoint}')
+    self.get_logger().info(f'policy_jax_enable: {self.policy_jax_enable}')
+    self.get_logger().info(f'policy_yaw_kp: {self.policy_yaw_kp}')
 
     #
     self.waypoints_quat = np.zeros((self.waypoints.shape[0], 4), dtype=np.float32)
@@ -100,7 +96,16 @@ def init_parameters(self):
         "max_roll_br": self.policy_max_roll_br,
         "max_pitch_br": self.policy_max_pitch_br,
         "max_yaw_br": self.policy_max_yaw_br,
-        "pass_gate_thr": self.policy_pass_gate_thr
+        "pass_gate_thr": self.policy_pass_gate_thr,
+        # JaxRacingPolicy's own param names (action_type="attitude"'s
+        # fallback-only rate scale, and action_type="mellinger"'s yaw
+        # P-wrapper gain) — reuses the same policy.max_*_br values rather
+        # than adding duplicate params, since both name the same real
+        # calibration constant (a body-rate scale in deg/s).
+        "max_roll_rate_dps": self.policy_max_roll_br,
+        "max_pitch_rate_dps": self.policy_max_pitch_br,
+        "max_yaw_rate_dps": self.policy_max_yaw_br,
+        "yaw_kp": self.policy_yaw_kp,
     }
 
     for i, waypoint_data in enumerate(self.waypoints):

@@ -5,7 +5,35 @@ controller_policy.py's PyTorch RacingPolicy.
 Same public interface as RacingPolicy (same update(state) -> (control, obs)
 contract, consumed identically by controller_utils.py's single_update), so
 selecting this policy instead is a drop-in swap gated by a ROS param — see
-controller_params.py's policy_jax.* / controller_node.py's init_controllers.
+controller_params.py's policy.jax_enable / controller_node.py's
+init_controllers.
+
+Supports checkpoints trained with either of two crazyflow action_types
+(read straight out of config.json — see __init__), dispatched to two
+different real-hardware controllers because the two conventions expect
+different things downstream:
+
+  * action_type="attitude" — dmcdrones' fixed-gain differential mixer
+    convention, raw action = [thrust_norm, roll, pitch, yaw_rate]. update()
+    returns this open-loop-CTBR-ish control_input for backward
+    compatibility AND the raw clipped action (control_input["raw_action"])
+    for controller_utils.py to stream via the new Crazyflie::sendRaceAction
+    path — crazyflie-firmware's examples/app_race_policy/src/mixer.c runs
+    the SAME mixer on-device (byte-exact C port of
+    crazyflow_interface/_mixer.py's mix_attitude_rpm) and bypasses PID
+    entirely, so this file no longer needs its own calibrated rate-scale
+    approximation of that mixer for real flight (max_roll_rate_dps etc.
+    stay only as a fallback/reference, see update()).
+
+  * action_type="mellinger" — a real physical [roll, pitch, yaw, thrust]
+    attitude setpoint (radians, Newtons), rescaled exactly the way
+    crazyflow_interface/__init__.py's _attitude_cmd does at train/sim time.
+    Dispatched to firmware's real onboard Mellinger controller via a
+    legacy RPYT setpoint (roll/pitch as real angles, yaw closed into a rate
+    command by a thin on-host P-wrapper — see update()) — no on-device
+    mixer involved, no crazyflow import needed here (the rescale bounds
+    are persisted as plain floats in config.json by train.py, matching how
+    hover_rpm/max_rpm are already persisted for the attitude path).
 
 IMPORTANT — things ported/verified vs. things requiring field calibration:
 
@@ -18,28 +46,25 @@ IMPORTANT — things ported/verified vs. things requiring field calibration:
     to mjc_dronetests/models.py's real networks given the same params.pkl.
     These parts are NOT guesses.
 
-  * The roll/pitch/yaw_rate -> degrees/second scale factors
-    (max_roll_rate_dps/max_pitch_rate_dps/max_yaw_rate_dps) are NOT
-    analytically derivable from the simulator: the trained policy's raw
-    action[1:4] outputs are fixed-scale per-motor RPM *differentials* in
-    the sim's mixer (see mix_attitude_rpm's docstring in dmcdrones) — an
-    open-loop torque-like proxy, not a physical angular rate in any
-    standard unit — whereas the real Crazyflie's CTBR setpoint expects a
-    genuine physical body rate in degrees/second. There is no unit
-    conversion that connects the two; the scale is a real calibration
-    constant that must be tuned on hardware (start conservative and small,
-    verify behavior at low thrust/tethered before increasing). The defaults
-    below are placeholders, not derived values.
+  * action_type="attitude"'s max_roll_rate_dps/max_pitch_rate_dps/
+    max_yaw_rate_dps are NOT analytically derivable from the simulator (see
+    the old design note this file used to lead with) and are kept only as
+    an emergency-fallback control_input shape — real flight should use
+    control_input["raw_action"] via sendRaceAction, not these. cmd_thrust
+    IS analytically correct: it reproduces the sim's own hover_rpm/max_rpm
+    two-segment mapping using the exact hover_rpm/max_rpm this checkpoint
+    was trained with (config.json).
 
-  * cmd_thrust, by contrast, IS analytically correct: it reproduces the
-    sim's own hover_rpm/max_rpm two-segment mapping (see mix_rpm_action's
-    docstring in dmcdrones) using the exact hover_rpm/max_rpm/kf this
-    checkpoint was trained with (config.json), rather than assuming hover
-    sits at the midpoint of the PWM range.
+  * action_type="mellinger"'s roll/pitch/yaw/thrust bounds ARE analytically
+    correct (a straight port of _attitude_cmd's own rescale, not a
+    calibration guess) — what still needs on-hardware tuning there is only
+    the yaw P-wrapper's gain (self.yaw_kp) and, as with any first flight,
+    verifying action=0 actually reproduces real hover.
 
-  * Per your explicit direction, this only supports action_type="attitude"
-    and obs_fn="v3" (raises a clear error otherwise) — race/ only, matching
-    the current race_mjx.yml / race_recurrent_mjx.yml training configs.
+  * Only obs_fn="v3" is supported (raises a clear error otherwise) — race/
+    only, matching the current race_mjx.yml / race_recurrent_mjx.yml
+    training configs. ma_race (multi-agent) checkpoints are out of scope
+    for this loader.
 """
 
 import functools
@@ -170,30 +195,30 @@ def _thrust_action_to_pwm_frac(thrust_action: float, hover_rpm: float, max_rpm: 
 
 class JaxRacingPolicy:
     """Loads a mjc_dronetests checkpoint from its config.json (the sibling
-    params.pkl, if present, is loaded lazily — see below) and runs it in an
-    open-loop-attitude (CTBR) control loop, matching RacingPolicy's
-    update(state) -> (control, obs) interface exactly.
+    params.pkl, if present, is loaded lazily — see below) and runs it,
+    matching RacingPolicy's update(state) -> (control, obs) interface
+    exactly. Dispatch shape of the returned control_input depends on
+    self.action_type ("attitude" or "mellinger") — see module docstring
+    and update() below.
 
     params (dict) mirrors RacingPolicy's own constructor contract:
         "gate_side": float
         "max_roll_rate_dps" / "max_pitch_rate_dps" / "max_yaw_rate_dps": float
-            — REQUIRES HARDWARE CALIBRATION, see module docstring.
+            — action_type="attitude" fallback control_input only, see
+            module docstring. Unused for action_type="mellinger".
+        "yaw_kp": float — action_type="mellinger" only, the on-host
+            desired-yaw-angle -> yaw-rate P-wrapper gain (1/s per radian of
+            error). Needs on-hardware tuning; start conservative.
     Gate positions/normals come from config.json (saved by
     mjc_dronetests/train.py from the actual gates the checkpoint trained
     against), not from a separately-configured waypoints param — avoids the
     two ever silently drifting apart.
 
-    config_path is the path to config.json itself, not the run directory —
-    onboard-policy mode (controller_params.py's onboard_policy.checkpoint_path,
-    consumed via get_observation() below) only ever needs the gate geometry
-    in config.json; the actual network weights run on the Crazyflie itself
-    (crazyflie-firmware/examples/app_race_policy) and are never used
-    ground-station-side in that mode. params.pkl is loaded from alongside
-    config_path (config_path.parent / "params.pkl") only if it actually
-    exists there — when it doesn't, self.net_params stays None and update()
-    (the network-driven path, not used by onboard-policy mode) raises a
-    clear error instead of failing on a missing file, so a ground station
-    only needs to ship config.json for the onboard-policy case.
+    config_path is the path to config.json itself, not the run directory.
+    params.pkl is loaded from alongside config_path (config_path.parent /
+    "params.pkl") only if it actually exists there — when it doesn't,
+    self.net_params stays None and update() raises a clear error instead of
+    failing on a missing file at construction time.
     """
 
     def __init__(self, config_path, params: dict, device: str = "cpu"):
@@ -204,10 +229,11 @@ class JaxRacingPolicy:
 
         if cfg["task"] != "race":
             raise ValueError(f"JaxRacingPolicy only supports task='race' checkpoints, got {cfg['task']!r}")
-        if cfg["action_type"] != "attitude":
+        self.action_type = cfg["action_type"]
+        if self.action_type not in ("attitude", "mellinger"):
             raise ValueError(
-                f"JaxRacingPolicy only supports action_type='attitude' (open-loop CTBR) "
-                f"checkpoints, got {cfg['action_type']!r}"
+                f"JaxRacingPolicy only supports action_type='attitude' or "
+                f"'mellinger' checkpoints, got {self.action_type!r}"
             )
         if cfg["obs_fn"] != "v3":
             raise ValueError(
@@ -217,8 +243,20 @@ class JaxRacingPolicy:
 
         self.action_dim = cfg["action_dim"]
         self.recurrent = bool(cfg.get("recurrent", False))
-        self.hover_rpm = float(cfg["hover_rpm"])
-        self.max_rpm = float(cfg["max_rpm"])
+        if self.action_type == "attitude":
+            self.hover_rpm = float(cfg["hover_rpm"])
+            self.max_rpm = float(cfg["max_rpm"])
+        else:
+            # Straight port of crazyflow_interface/__init__.py's own
+            # _attitude_cmd bounds — persisted as plain floats by train.py
+            # (mellinger_attitude_low/high), not recomputed here, so this
+            # file never needs a runtime crazyflow import (see module
+            # docstring). Order is [roll, pitch, yaw, thrust], matching the
+            # sim's own action convention exactly (NOT the "attitude"
+            # action_type's [thrust, roll, pitch, yaw_rate] order above).
+            self.attitude_low = np.asarray(cfg["mellinger_attitude_low"], dtype=np.float64)
+            self.attitude_high = np.asarray(cfg["mellinger_attitude_high"], dtype=np.float64)
+            self.yaw_kp = params.get("yaw_kp", 1.0)
 
         self.gate_positions = np.asarray(cfg["gate_positions"], dtype=np.float64)  # (N, 3)
         self.gate_normals = np.asarray(cfg["gate_normals"], dtype=np.float64)      # (N, 3)
@@ -330,14 +368,10 @@ class JaxRacingPolicy:
         ]).astype(np.float32)
 
     def get_observation(self, state) -> np.ndarray:
-        """Compute the current v3 observation WITHOUT running the policy
-        network — used for onboard-policy mode (see controller_utils.py's
-        single_update()), where the trained network runs on the Crazyflie
-        itself (crazyflie-firmware/examples/app_race_policy) and the
-        workstation's only job is computing+streaming this observation, not
-        the action. Advances gate-tracking state exactly as update() does
-        (same underlying call), so gate_idx stays correct even if a run
-        switches between onboard and workstation-side execution.
+        """Compute the current v3 observation and advance gate-tracking
+        state — the first half of update() below, split out so a caller
+        that only needs the observation (e.g. logging/diagnostics) doesn't
+        have to run the network too.
 
         state must provide 'x' (world position), 'R' (body->world rotation
         matrix), 'v_b' (body-frame linear velocity), 'w_b' (body-frame
@@ -359,10 +393,8 @@ class JaxRacingPolicy:
         if self.net_params is None:
             raise RuntimeError(
                 "JaxRacingPolicy.update() called but no params.pkl was found "
-                "alongside config.json at construction time — this instance "
-                "can only serve get_observation() (onboard-policy mode). "
-                "Point config_path at a run directory that also has "
-                "params.pkl if you need network-driven control here."
+                "alongside config.json at construction time. Point config_path "
+                "at a run directory that also has params.pkl."
             )
         obs = self.get_observation(state)
         obs_jax = jnp.asarray(obs)
@@ -381,16 +413,45 @@ class JaxRacingPolicy:
         # [-1, 1] exactly like the training-time env.step()'s own clip.
         action = np.clip(actor_mean, -1.0, 1.0)
 
-        cmd_thrust = _thrust_action_to_pwm_frac(float(action[0]), self.hover_rpm, self.max_rpm)
+        if self.action_type == "attitude":
+            cmd_thrust = _thrust_action_to_pwm_frac(float(action[0]), self.hover_rpm, self.max_rpm)
+            # Fallback-only approximation — see module docstring. Real
+            # flight dispatches control_input["raw_action"] via
+            # Crazyflie::sendRaceAction to firmware's on-device mixer
+            # (crazyflie-firmware/examples/app_race_policy/src/mixer.c)
+            # instead of this rate-scale guess.
+            roll_dps = float(action[1]) * self.max_roll_rate_dps
+            pitch_dps = float(action[2]) * self.max_pitch_rate_dps
+            yaw_dps = float(action[3]) * self.max_yaw_rate_dps
+            control_input = {
+                "cmd_thrust": cmd_thrust,
+                "cmd_w": np.array([roll_dps, pitch_dps, yaw_dps]),
+                "raw_action": action,
+            }
+        else:  # mellinger
+            R = np.asarray(state["R"], dtype=np.float64)
+            mid = (self.attitude_low + self.attitude_high) / 2.0
+            half_range = (self.attitude_high - self.attitude_low) / 2.0
+            roll_rad, pitch_rad, yaw_rad, thrust_n = mid + action.astype(np.float64) * half_range
 
-        # See module docstring: these scale factors are NOT analytically
-        # derived and MUST be calibrated on hardware before flight.
-        roll_dps = float(action[1]) * self.max_roll_rate_dps
-        pitch_dps = float(action[2]) * self.max_pitch_rate_dps
-        yaw_dps = float(action[3]) * self.max_yaw_rate_dps
+            # Real hardware has no genuine 3-axis-angle CRTP setpoint for a
+            # pure attitude+thrust command (see the crazyflie_ros plan doc
+            # for why) — close the yaw loop with a thin on-host P-wrapper
+            # against the current yaw instead, same pattern lsy_drone_racing's
+            # own real-hardware AttitudeController uses. Wrapped to the
+            # shortest signed angular distance so a yaw crossing +-pi
+            # doesn't spike the rate command.
+            current_yaw_rad = float(np.arctan2(R[1, 0], R[0, 0]))
+            yaw_err_rad = yaw_rad - current_yaw_rad
+            yaw_err_rad = np.arctan2(np.sin(yaw_err_rad), np.cos(yaw_err_rad))
+            yaw_rate_dps = np.degrees(self.yaw_kp * yaw_err_rad)
 
-        control_input = {
-            "cmd_thrust": cmd_thrust,
-            "cmd_w": np.array([roll_dps, pitch_dps, yaw_dps]),
-        }
+            thrust_min_total, thrust_max_total = self.attitude_low[3], self.attitude_high[3]
+            cmd_thrust = float(np.clip(
+                (thrust_n - thrust_min_total) / (thrust_max_total - thrust_min_total), 0.0, 1.0
+            ))
+            control_input = {
+                "cmd_thrust": cmd_thrust,
+                "cmd_attitude": np.array([np.degrees(roll_rad), np.degrees(pitch_rad), yaw_rate_dps]),
+            }
         return control_input, obs

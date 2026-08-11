@@ -6,7 +6,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
 from std_srvs.srv import Trigger
-from jirl_interfaces.msg import CommandCTBR, Trajectory, Observations, OdometryArray, RaceObservation
+from jirl_interfaces.msg import CommandCTBR, CommandAction, CommandAttitude, Trajectory, Observations, OdometryArray
 from jirl_interfaces.srv import UpdateSetpoint, StartTrajectory
 
 from rotorpy.controllers.quadrotor_control import SE3ControlCTBR
@@ -99,21 +99,19 @@ class ControllerNode(Node):
         """
         Init controllers
         """
-        self.policy = RacingPolicy(crazyflie_params, self.policy_path, self.params, device=self.device, use_cond=self.use_cond)
+        # Off-board policy is now the only execution mode (see
+        # controller_params.py's policy.jax_enable) — a mjc_dronetests
+        # checkpoint (JaxRacingPolicy, gate-racing v3 obs, action_type
+        # "attitude"/"mellinger" read from its own config.json — see
+        # controller_utils.py's single_update() for how those two dispatch
+        # differently) or the legacy PyTorch waypoint-tracking RacingPolicy.
+        # Never both: JaxRacingPolicy checkpoints use a completely different
+        # observation/action convention than RacingPolicy expects.
+        if self.policy_jax_enable:
+            self.policy = JaxRacingPolicy(self.policy_path, self.params, device=self.device)
+        else:
+            self.policy = RacingPolicy(crazyflie_params, self.policy_path, self.params, device=self.device, use_cond=self.use_cond)
         self.se3_controller = SE3ControlCTBR(crazyflie_params)
-
-        # Onboard-policy mode (see controller_params.py) — only the v3
-        # obs-computation/gate-tracking half of JaxRacingPolicy gets used
-        # (get_observation()); onboard_policy_checkpoint is a path to
-        # config.json itself, and params.pkl (if not present alongside it)
-        # is simply never loaded — see JaxRacingPolicy's docstring. None
-        # when disabled so single_update() can branch on it directly rather
-        # than checking the enable flag and the object separately.
-        self.onboard_obs_builder = None
-        if self.onboard_policy_enable:
-            self.onboard_obs_builder = JaxRacingPolicy(
-                self.onboard_policy_checkpoint, self.params, device=self.device
-            )
 
     def init_callback_groups(self):
         """
@@ -159,12 +157,22 @@ class ControllerNode(Node):
             qos_best_effort
         )
 
-        # Race observation stream to the onboard policy (see
-        # controller_params.py's onboard_policy.enable) — parallel to
-        # cmd_pub above, sent instead of it (not alongside) when active.
-        self.race_obs_pub = self.create_publisher(
-            RaceObservation,
-            '/race_obs',
+        # Custom controller / open-loop mixer path (JaxRacingPolicy
+        # action_type="attitude") — see controller_utils.py's
+        # send_action_command. Sent instead of cmd_pub above, not
+        # alongside, when active.
+        self.action_pub = self.create_publisher(
+            CommandAction,
+            '/action_cmd',
+            qos_best_effort
+        )
+
+        # Onboard-Mellinger path (JaxRacingPolicy action_type="mellinger")
+        # — see controller_utils.py's send_attitude_command. Also sent
+        # instead of cmd_pub, not alongside.
+        self.attitude_pub = self.create_publisher(
+            CommandAttitude,
+            '/attitude_cmd',
             qos_best_effort
         )
 

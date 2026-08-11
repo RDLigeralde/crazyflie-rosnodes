@@ -31,6 +31,20 @@
       # path: /home/neo/workspace/logs/policies/2025-08-27_12-51-23/best_model.pt     # single agent from new merge_branch environment with new rewards (gate pass, no progress)
       path: /home/neo/workspace/logs/policies/2025-09-10_23-41-23/best_model.pt     # lemniscate dense single agent
 
+      # jax_enable=True loads a mjc_dronetests checkpoint (path must then
+      # point at that checkpoint's config.json, not a .pt file above) via
+      # JaxRacingPolicy instead of the legacy PyTorch RacingPolicy — see
+      # controller_node.py's init_controllers() and the crazyflow branch's
+      # plan doc. Its action_type ("attitude" -> custom open-loop-mixer
+      # controller, or "mellinger" -> onboard Mellinger controller) is read
+      # from that config.json, not set here.
+      jax_enable: False
+      # action_type="mellinger" only: on-host desired-yaw -> yaw-rate
+      # P-wrapper gain (1/s per radian of error) — needs on-hardware
+      # tuning, start conservative. Unused for action_type="attitude" or
+      # the legacy RacingPolicy.
+      yaw_kp: 1.0
+
       max_pitch_br: 100.0
       max_roll_br: 100.0
       max_yaw_br: 200.0
@@ -69,6 +83,13 @@
       - radio://0/100/2M/E7E7E701B2
     logger_period_ms: 1000
     reconnection_period_ms: 2000
+    # Sets stabilizer.controller=2 (Mellinger) at connect time — only for a
+    # vehicle flashed with a STANDARD firmware build being flown with
+    # policy.jax_enable + a "mellinger"-action_type checkpoint above. A
+    # vehicle flashed with examples/app_race_policy (the custom
+    # open-loop-mixer controller, for "attitude"-action_type checkpoints)
+    # must NOT set this — see crazyradio_driver_params.py.
+    mellinger_enable: False
 
 # Vicon
 /vicon_node:

@@ -4,23 +4,22 @@ link, standalone from the ROS2 stack (no controller/crazyradio_driver nodes
 need to be running — this talks to the Crazyflie directly via cflib, the
 same library crazyradio_driver itself uses).
 
-Exists because nothing currently writes these automatically: obsChanEnable
+Exists because nothing currently writes these automatically: actChanEnable
 defaults to 0 on every boot (see race_controller.c's file docstring), and
 hoverRpm/maxRpm/kf/differentialFrac ship with mjc_dronetests' sim-nominal
-defaults baked in at compile time (matching whichever checkpoint was last
-exported — see export_policy_c.py) rather than a real vehicle's calibrated
+defaults baked in at compile time rather than a real vehicle's calibrated
 values. This script is the manual bridge until/unless that gets wrapped in
 a ROS service.
 
 Usage
 -----
-Enable onboard-policy mode (the common case — do this once per session,
-before arming, per the flight-sequence runbook):
-    python3 bin/set_ctrl_race_params.py --uri radio://0/80/2M/E7E7E701B1 --enable-onboard
+Enable the custom-controller action stream (the common case — do this once
+per session, before arming, per the flight-sequence runbook):
+    python3 bin/set_ctrl_race_params.py --uri radio://0/80/2M/E7E7E701B1 --enable-stream
 
-Disable it (fall back to the ctrlRace group's own action0..3 bench-test
-params):
-    python3 bin/set_ctrl_race_params.py --uri radio://0/80/2M/E7E7E701B1 --disable-onboard
+Disable it (falls back to PID; ctrlRace.benchEnable's own action0..3 bench-
+test params stay available separately):
+    python3 bin/set_ctrl_race_params.py --uri radio://0/80/2M/E7E7E701B1 --disable-stream
 
 Push real per-vehicle calibration values (system-ID'd, not sim-nominal —
 see KNOWN_PARAMS below for every name race_controller.c actually exposes;
@@ -44,9 +43,18 @@ GROUP = "ctrlRace"
 # Every param race_controller.c's PARAM_GROUP_START(ctrlRace) currently
 # declares — kept here only for --read's default listing; --set works for
 # any name regardless (e.g. a future param this list hasn't been updated
-# for yet), it's not a validating whitelist.
+# for yet), it's not a validating whitelist. This whole param group only
+# exists on a vehicle flashed with examples/app_race_policy
+# (CONFIG_CONTROLLER_OOT=y) — but that ONE build now serves both the
+# attitude-mixer path (actChanEnable/actStaleTicks/benchEnable/hoverRpm/
+# maxRpm/kf/differentialFrac/action0..3) and the onboard-Mellinger path
+# (mellingerEnable) via race_controller.c's own runtime arbitration; no
+# separate standard-firmware build is needed for Mellinger anymore.
 KNOWN_PARAMS = [
-    "obsChanEnable",
+    "actChanEnable",
+    "actStaleTicks",
+    "benchEnable",
+    "mellingerEnable",
     "hoverRpm",
     "maxRpm",
     "kf",
@@ -76,25 +84,25 @@ def parse_set_args(set_args):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--uri", required=True, help="Crazyradio URI, e.g. radio://0/80/2M/E7E7E701B1")
-    p.add_argument("--enable-onboard", action="store_true", help="Shortcut for --set obsChanEnable=1")
-    p.add_argument("--disable-onboard", action="store_true", help="Shortcut for --set obsChanEnable=0")
+    p.add_argument("--enable-stream", action="store_true", help="Shortcut for --set actChanEnable=1")
+    p.add_argument("--disable-stream", action="store_true", help="Shortcut for --set actChanEnable=0")
     p.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
                     help="Set ctrlRace.NAME to VALUE. Repeatable.")
     p.add_argument("--read", action="store_true",
                     help="Print current values of every param in KNOWN_PARAMS after applying any --set/--enable/--disable above.")
     args = p.parse_args()
 
-    if args.enable_onboard and args.disable_onboard:
-        p.error("--enable-onboard and --disable-onboard are mutually exclusive")
+    if args.enable_stream and args.disable_stream:
+        p.error("--enable-stream and --disable-stream are mutually exclusive")
 
     sets = parse_set_args(args.set)
-    if args.enable_onboard:
-        sets.append(("obsChanEnable", "1"))
-    if args.disable_onboard:
-        sets.append(("obsChanEnable", "0"))
+    if args.enable_stream:
+        sets.append(("actChanEnable", "1"))
+    if args.disable_stream:
+        sets.append(("actChanEnable", "0"))
 
     if not sets and not args.read:
-        p.error("nothing to do — pass --set/--enable-onboard/--disable-onboard and/or --read")
+        p.error("nothing to do — pass --set/--enable-stream/--disable-stream and/or --read")
 
     cflib.crtp.init_drivers()
     with SyncCrazyflie(args.uri, cf=Crazyflie(rw_cache="./cache")) as scf:
@@ -107,7 +115,7 @@ def main():
                 print(f"set {complete_name} = {value}")
             except KeyError:
                 print(f"FAILED: {complete_name} not in param TOC — "
-                      f"is the firmware actually flashed with this param group?", file=sys.stderr)
+                      f"is the firmware actually flashed with examples/app_race_policy?", file=sys.stderr)
                 sys.exit(1)
             except AttributeError as e:
                 print(f"FAILED: {complete_name}: {e}", file=sys.stderr)

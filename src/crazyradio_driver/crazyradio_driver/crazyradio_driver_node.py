@@ -1,7 +1,7 @@
 from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
-from jirl_interfaces.msg import CommandCTBR, OdometryArray, RaceObservation
+from jirl_interfaces.msg import CommandCTBR, CommandAction, CommandAttitude, OdometryArray
 from jirl_interfaces.srv import Arm
 
 from cflib.utils import uri_helper
@@ -18,7 +18,7 @@ class CrazyradioDriverNode(Node):
 
     # Import methods
     from .crazyradio_driver_params import init_parameters
-    from .crazyradio_driver_callbacks import cmd_clbk, reconnect_clbk, mocap_clbk, arm_clbk, race_obs_clbk #, logger_clbk
+    from .crazyradio_driver_callbacks import cmd_clbk, reconnect_clbk, mocap_clbk, arm_clbk, action_clbk, attitude_clbk #, logger_clbk
 
     scf_dict = {}
 
@@ -52,6 +52,11 @@ class CrazyradioDriverNode(Node):
 
                     self.scf_dict[crazyflie_name].cf.param.set_value('stabilizer.estimator', '2')
                     self.scf_dict[crazyflie_name].param.set_value('locSrv.extQuatStdDev', 0.06)
+                    if self.mellinger_enable:
+                        # See crazyradio_driver_callbacks.py's reconnect_clbk
+                        # for the full explanation — sets ctrlRace.mellingerEnable,
+                        # not stabilizer.controller.
+                        self.scf_dict[crazyflie_name].cf.param.set_value('ctrlRace.mellingerEnable', '1')
                 except Exception as e:
                     continue
 
@@ -108,14 +113,27 @@ class CrazyradioDriverNode(Node):
             callback_group=self.mocap_cgroup
         )
 
-        # Race observation (onboard-policy mode — see controller_utils.py's
-        # single_update(); parallel to /ctbr_cmd's own subscription above,
-        # same callback group since it's the same rate-class of per-tick
-        # traffic to the same Crazyflie).
-        self.race_obs_sub = self.create_subscription(
-            RaceObservation,
-            '/race_obs',
-            self.race_obs_clbk,
+        # Custom controller / open-loop mixer path (JaxRacingPolicy
+        # action_type="attitude" — see controller_utils.py's
+        # send_action_command). Parallel to /ctbr_cmd's own subscription
+        # above, same callback group since it's the same rate-class of
+        # per-tick traffic to the same Crazyflie, sent instead of it (not
+        # alongside) when active.
+        self.action_sub = self.create_subscription(
+            CommandAction,
+            '/action_cmd',
+            self.action_clbk,
+            qos_best_effort,
+            callback_group=self.cmd_cgroup
+        )
+
+        # Onboard-Mellinger path (JaxRacingPolicy action_type="mellinger"
+        # — see controller_utils.py's send_attitude_command). Also sent
+        # instead of /ctbr_cmd, not alongside.
+        self.attitude_sub = self.create_subscription(
+            CommandAttitude,
+            '/attitude_cmd',
+            self.attitude_clbk,
             qos_best_effort,
             callback_group=self.cmd_cgroup
         )
